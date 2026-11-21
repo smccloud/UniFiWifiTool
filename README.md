@@ -66,7 +66,7 @@ Docker Compose is optional. The image is designed to be run directly, including
 through unRAID's Docker Manager.
 
 ```bash
-docker pull smccloud/unifi-wifi-tool:0.7.0
+docker pull smccloud/unifi-wifi-tool:0.8.0
 
 mkdir -p /opt/unifi-wifi-tool
 docker run -d \
@@ -82,7 +82,7 @@ docker run -d \
   -e UNIFI_API_KEY='...' \
   -e UNIFI_USERNAME='unifi-service' \
   -e UNIFI_PASSWORD='...' \
-  smccloud/unifi-wifi-tool:0.7.0
+  smccloud/unifi-wifi-tool:0.8.0
 ```
 
 To build from source instead:
@@ -90,7 +90,7 @@ To build from source instead:
 ```bash
 git clone <this-repo> unifi-wifi-tool
 cd unifi-wifi-tool
-docker build -t smccloud/unifi-wifi-tool:0.7.0 .
+docker build -t smccloud/unifi-wifi-tool:0.8.0 .
 ```
 
 Open <http://localhost:8080> (or the host/IP where the container runs).
@@ -295,13 +295,13 @@ cd frontend && npm run build
 ## Docker build and CI
 
 ```bash
-docker build -t smccloud/unifi-wifi-tool:0.7.0 .
+docker build -t smccloud/unifi-wifi-tool:0.8.0 .
 ```
 
 The `Jenkinsfile` builds and tests the image, then publishes successful
 `master` builds to Docker Hub (`smccloud/unifi-wifi-tool` by default) using the
 Jenkins username/password credentials named **Docker**. Images are pushed as
-`:0.7.0` (the version in `VERSION`) and `:latest`. Override the repository or
+`:0.8.0` (the version in `VERSION`) and `:latest`. Override the repository or
 credential ID with the
 `DOCKERHUB_REPOSITORY` and `DOCKERHUB_CREDENTIALS_ID` parameters; disable
 publishing with `PUSH_TO_DOCKERHUB=false`.
@@ -344,7 +344,7 @@ findings.
 
 ### Versioning
 
-The application version lives in [`VERSION`](VERSION) and is currently `0.7.0`.
+The application version lives in [`VERSION`](VERSION) and is currently `0.8.0`.
 The backend exposes it through `/api/auth/me`, `/api/system/status`, the health
 endpoint, and the UI footer/About panel. `frontend/package.json` and
 `.env.example`'s `IMAGE_VERSION` mirror it, and the backend test suite fails if

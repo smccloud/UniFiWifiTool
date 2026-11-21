@@ -1,6 +1,6 @@
 [project]
 name = "unifi-wifi-tool-backend"
-version = "0.7.0"
+version = "0.8.0"
 description = "Manage device access to UniFi WiFi networks"
 license = {text = "MIT"}
 requires-python = ">=3.12"
