@@ -217,6 +217,10 @@ Open a device → **Discipline Mode**:
 - Set download and upload limits in **Mbps or Kbps**. The UI converts the
   entered values to Kbps and shows the exact values that will be sent before
   anything is applied.
+- Quick presets: **1 Mbps**, **768 Kbps**, **14.4 Kbps**, **28.8 Kbps**,
+  **33.6 Kbps symmetrical**, and **56 Kbps down / 33.6 Kbps up**. UniFi stores
+  whole Kbps, so fractional presets are rounded (for example, 33.6 Kbps becomes
+  34 Kbps) and the preview shows the rounded value.
 - Choose a duration (30 minutes, 1 hour, 2 hours, 4 hours, 8 hours, or a custom
   number of minutes).
 - Apply the limit. The app validates the converted Kbps values, creates a

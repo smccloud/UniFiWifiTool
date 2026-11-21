@@ -41,6 +41,21 @@ function clientName(client: Client): string {
   return client.label || client.name || client.hostname || "Unknown device";
 }
 
+// UniFi stores bandwidth rates as whole Kbps. Fractional presets are rounded
+// before being sent, and the exact values are shown in the preview.
+const SPEED_PRESETS: Array<{
+  label: string;
+  download: number;
+  upload: number;
+}> = [
+  { label: "1 Mbps", download: 1000, upload: 1000 },
+  { label: "768 Kbps", download: 768, upload: 768 },
+  { label: "14.4 Kbps", download: 14.4, upload: 14.4 },
+  { label: "28.8 Kbps", download: 28.8, upload: 28.8 },
+  { label: "33.6 Kbps symmetrical", download: 33.6, upload: 33.6 },
+  { label: "56 down / 33.6 up Kbps", download: 56, upload: 33.6 },
+];
+
 
 // ---------------------------------------------------------------------------
 // Overview
@@ -689,6 +704,12 @@ function DeviceDrawer({
     setSpeedUnit(nextUnit);
   }
 
+  function applySpeedPreset(preset: (typeof SPEED_PRESETS)[number]) {
+    setSpeedUnit("Kbps");
+    setDownLimit(String(Math.round(preset.download)));
+    setUpLimit(String(Math.round(preset.upload)));
+  }
+
   function speedDetail(kbps: number): string {
     return kbps >= 1000 ? `${formatSpeed(kbps)} (${kbps} Kbps)` : formatSpeed(kbps);
   }
@@ -887,6 +908,23 @@ function DeviceDrawer({
               </div>
             ) : (
               <div className="form-stack">
+                <div className="preset-row">
+                  {SPEED_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      className="chip"
+                      disabled={disabled || !disciplineOk}
+                      onClick={() => applySpeedPreset(preset)}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="muted small">
+                  Presets use whole Kbps. Fractional values (14.4, 28.8, 33.6) are
+                  rounded before the limit is sent to UniFi.
+                </p>
                 <div className="form-grid two">
                   <label>
                     <span>Download limit ({speedUnit})</span>

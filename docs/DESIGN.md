@@ -322,9 +322,11 @@ multiple windows, per-window allow/block actions, a fallback state, and a
 plain-English preview. Block windows are evaluated before allow windows.
 
 The Discipline Mode panel provides download/upload limits in Mbps or Kbps,
-unit conversion with an exact Kbps preview, duration presets or a custom
-duration, an active-limit expiry display, and an early **End speed limit**
-action. Values are validated and converted to Kbps before the controller call.
+quick presets (1 Mbps, 768 Kbps, 14.4 Kbps, 28.8 Kbps, 33.6 Kbps symmetrical,
+and 56/33.6 Kbps), unit conversion with an exact Kbps preview, duration presets
+or a custom duration, an active-limit expiry display, and an early **End speed
+limit** action. UniFi stores whole Kbps, so fractional presets are rounded and
+the preview shows the resulting values before the controller call.
 The wording is deliberately neutral and parental-control oriented.
 
 ## 9. Security
