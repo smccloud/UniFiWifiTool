@@ -240,6 +240,33 @@ limits are unavailable rather than blocking the device. Automatic restoration
 runs in the scheduler loop; with `SCHEDULER_ENABLED=false`, use **End speed
 limit** manually.
 
+## Anonymous install tracking (opt-in)
+
+Anonymous install tracking is **off by default**. When enabled, the app sends a
+small heartbeat once per day containing only:
+
+- a random install ID stored in `/data`,
+- the app version,
+- a coarse platform label such as `linux/amd64`,
+- the deployment type such as `docker` or `unraid`.
+
+It does **not** send or store IP addresses, MAC addresses, SSIDs, device names,
+controller URLs, credentials, or any other network data. The public page at
+<https://unifiwifitool.smccloud.com> shows aggregate counts only; an
+authenticated admin section lists anonymous install IDs.
+
+Enable it with:
+
+```bash
+TELEMETRY_ENABLED=true
+TELEMETRY_URL=https://unifiwifitool.smccloud.com/api/v1/heartbeat
+DEPLOYMENT_TYPE=unraid
+```
+
+The tracking service source and deployment notes are in
+[telemetry/](telemetry/README.md). The proposal and privacy requirements are
+tracked in [issue #3](https://github.com/smccloud/UniFiWifiTool/issues/3).
+
 ## Audit retention
 
 The audit log keeps login, access-change, block, and unblock history. By
@@ -376,6 +403,10 @@ agents where bridge/veth creation is unavailable.
 | `AUTO_APPLY` | `true` | Apply desired states/schedules automatically. |
 | `DRY_RUN` | `false` | Log calls without sending them. |
 | `AUDIT_RETENTION_DAYS` | `0` | Days to keep audit entries; `0` = forever. UI override available. |
+| `TELEMETRY_ENABLED` | `false` | Opt in to anonymous install heartbeats. |
+| `TELEMETRY_URL` | tracking service | Anonymous heartbeat endpoint. |
+| `TELEMETRY_INTERVAL_SECONDS` | `86400` | Heartbeat interval, at least once per day. |
+| `DEPLOYMENT_TYPE` | `docker` | Coarse deployment label sent with heartbeats. |
 | `SCHEDULER_ENABLED` | `true` | Background reconciliation and retention loop. |
 | `SCHEDULER_INTERVAL_SECONDS` | `30` | Transition check interval. |
 | `ENABLE_SSID_ALLOWLIST` | `false` | Experimental per-SSID MAC filter writes. |

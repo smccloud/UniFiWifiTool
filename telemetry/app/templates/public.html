@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Active installs · UniFi WiFi Access Manager{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">Anonymous telemetry</p>
+  <h1>Active installs</h1>
+  <p class="lede">
+    Aggregate counts from installations that opted in to anonymous install tracking.
+    No IP addresses, WiFi names, device names, or controller details are collected.
+  </p>
+</section>
+
+<section class="cards">
+  <div class="card"><span>Active last 24 hours</span><strong>{{ stats.counts["24h"] }}</strong></div>
+  <div class="card"><span>Active last 7 days</span><strong>{{ stats.counts["7d"] }}</strong></div>
+  <div class="card"><span>Active last 30 days</span><strong>{{ stats.counts["30d"] }}</strong></div>
+  <div class="card"><span>Known installs</span><strong>{{ stats.counts["total"] }}</strong></div>
+</section>
+
+<div class="grid">
+  <section class="panel">
+    <h2>Versions</h2>
+    <p class="muted">Active installs in the last 30 days</p>
+    {% if stats.versions %}
+    <table>
+      <thead><tr><th>Version</th><th class="right">Installs</th></tr></thead>
+      <tbody>
+        {% for version, count in stats.versions %}
+        <tr><td>{{ version }}</td><td class="right">{{ count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No data yet.</p>{% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>Platforms</h2>
+    <p class="muted">Active installs in the last 30 days</p>
+    {% if stats.platforms %}
+    <table>
+      <thead><tr><th>Platform</th><th class="right">Installs</th></tr></thead>
+      <tbody>
+        {% for platform, count in stats.platforms %}
+        <tr><td>{{ platform }}</td><td class="right">{{ count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No data yet.</p>{% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>Deployments</h2>
+    <p class="muted">Active installs in the last 30 days</p>
+    {% if stats.deployments %}
+    <table>
+      <thead><tr><th>Deployment</th><th class="right">Installs</th></tr></thead>
+      <tbody>
+        {% for deployment, count in stats.deployments %}
+        <tr><td>{{ deployment }}</td><td class="right">{{ count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No data yet.</p>{% endif %}
+  </section>
+</div>
+
+<p class="updated">Last updated {{ stats.updated_at|dt }}.</p>
+{% endblock %}

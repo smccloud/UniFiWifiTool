@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Admin · Install tracking{% endblock %}
+{% block content %}
+<section class="hero compact">
+  <p class="eyebrow">Protected admin section</p>
+  <h1>Anonymous installs</h1>
+  <p class="lede">
+    {{ total }} install{{ "" if total == 1 else "s" }} matching the current filter.
+    Install IDs are random and are not derived from hardware, IP addresses, or networks.
+  </p>
+</section>
+
+<section class="panel">
+  <form class="filters" method="get" action="/admin">
+    <label>Version
+      <select name="version">
+        <option value="">All versions</option>
+        {% for version, count in stats.versions %}
+        <option value="{{ version }}" {% if version == version_filter %}selected{% endif %}>{{ version }} ({{ count }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Platform
+      <select name="platform">
+        <option value="">All platforms</option>
+        {% for platform, count in stats.platforms %}
+        <option value="{{ platform }}" {% if platform == platform_filter %}selected{% endif %}>{{ platform }} ({{ count }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Activity
+      <select name="active">
+        <option value="">Any time</option>
+        <option value="24h" {% if active == "24h" %}selected{% endif %}>Last 24 hours</option>
+        <option value="7d" {% if active == "7d" %}selected{% endif %}>Last 7 days</option>
+        <option value="30d" {% if active == "30d" %}selected{% endif %}>Last 30 days</option>
+      </select>
+    </label>
+    <button class="button" type="submit">Filter</button>
+    <a class="button ghost" href="/admin">Reset</a>
+  </form>
+</section>
+
+{% if pruned %}
+<div class="notice">Pruned {{ pruned }} stale install{{ "" if pruned == "1" else "s" }}.</div>
+{% endif %}
+
+<section class="panel">
+  {% if installs %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Install ID</th>
+          <th>Version</th>
+          <th>Platform</th>
+          <th>Deployment</th>
+          <th>First seen</th>
+          <th>Last seen</th>
+          <th>Active</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for install in installs %}
+        <tr>
+          <td class="mono">{{ install.install_id }}</td>
+          <td>{{ install.app_version }}</td>
+          <td>{{ install.platform }}</td>
+          <td>{{ install.deployment }}</td>
+          <td>{{ install.first_seen|dt }}</td>
+          <td>{{ install.last_seen|dt }}</td>
+          <td>{% if install.is_active %}<span class="badge good">Active</span>{% else %}<span class="badge">Stale</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="pagination">
+    {% if page > 1 %}<a class="button ghost" href="/admin?page={{ page - 1 }}&version={{ version_filter }}&platform={{ platform_filter }}&active={{ active }}">Previous</a>{% endif %}
+    <span class="muted">Page {{ page }} of {{ pages }}</span>
+    {% if page < pages %}<a class="button ghost" href="/admin?page={{ page + 1 }}&version={{ version_filter }}&platform={{ platform_filter }}&active={{ active }}">Next</a>{% endif %}
+  </div>
+  {% else %}
+  <p class="empty">No installs match the current filter.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Retention</h2>
+  <p class="muted">
+    Delete installs that have not sent a heartbeat in {{ retention_days }} days.
+    The public page only shows aggregate counts; individual install IDs are visible only here.
+  </p>
+  <form method="post" action="/admin/prune">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <button class="button danger" type="submit">Prune stale installs</button>
+  </form>
+</section>
+{% endblock %}

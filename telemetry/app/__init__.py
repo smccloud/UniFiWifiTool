@@ -1,0 +1,1 @@
+"""Anonymous install tracking service."""

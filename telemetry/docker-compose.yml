@@ -1,0 +1,35 @@
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${TELEMETRY_DB_NAME:-telemetry}
+      MARIADB_USER: ${TELEMETRY_DB_USER:-telemetry}
+      MARIADB_PASSWORD: ${TELEMETRY_DB_PASSWORD:?set TELEMETRY_DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${TELEMETRY_DB_ROOT_PASSWORD:?set TELEMETRY_DB_ROOT_PASSWORD}
+    volumes:
+      - telemetry-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      TELEMETRY_DATABASE_URL: mysql+pymysql://${TELEMETRY_DB_USER:-telemetry}:${TELEMETRY_DB_PASSWORD}@db:3306/${TELEMETRY_DB_NAME:-telemetry}
+      TELEMETRY_ADMIN_USERNAME: ${TELEMETRY_ADMIN_USERNAME:-admin}
+      TELEMETRY_ADMIN_PASSWORD: ${TELEMETRY_ADMIN_PASSWORD:?set TELEMETRY_ADMIN_PASSWORD}
+      TELEMETRY_RETENTION_DAYS: ${TELEMETRY_RETENTION_DAYS:-90}
+      TELEMETRY_PUBLIC_URL: ${TELEMETRY_PUBLIC_URL:-https://unifiwifitool.smccloud.com}
+    ports:
+      # Bind to loopback and place a TLS reverse proxy in front of it.
+      - "127.0.0.1:8081:8000"
+
+volumes:
+  telemetry-db:

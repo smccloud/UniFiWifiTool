@@ -118,6 +118,30 @@ pipeline {
             }
         }
 
+        stage('Telemetry tests') {
+            steps {
+                sh '''
+                    set -eu
+                    rm -f telemetry/test-results.xml
+                    docker run --rm \
+                        --network "$DOCKER_NETWORK" \
+                        -v "$WORKSPACE/telemetry:/src" \
+                        -w /src \
+                        python:3.13-slim \
+                        sh -ec "pip install --quiet --no-cache-dir -r requirements-dev.txt && pytest --junitxml=test-results.xml"
+                '''
+            }
+        }
+
+        stage('Telemetry image build') {
+            steps {
+                sh '''
+                    set -eu
+                    docker build --network "$DOCKER_NETWORK" -t "unifi-wifi-telemetry:$BUILD_NUMBER" telemetry
+                '''
+            }
+        }
+
         stage('Docker build') {
             steps {
                 sh '''
@@ -584,12 +608,13 @@ PY
     post {
         always {
             junit allowEmptyResults: true, testResults: 'backend/test-results.xml'
+            junit allowEmptyResults: true, testResults: 'telemetry/test-results.xml'
             archiveArtifacts artifacts: 'image-inspect.json, smoke-health.json', allowEmptyArchive: true
             sh '''
                 docker rm -f "$AUTH_CONTAINER" "$SECURE_CONTAINER" "$PERSIST_CONTAINER" >/dev/null 2>&1 || true
                 docker volume rm "$DATA_VOLUME" >/dev/null 2>&1 || true
                 docker volume rm "unifi-wifi-ci-node-modules-$BUILD_NUMBER" >/dev/null 2>&1 || true
-                docker rmi "$IMAGE" >/dev/null 2>&1 || true
+                docker rmi "$IMAGE" "unifi-wifi-telemetry:$BUILD_NUMBER" >/dev/null 2>&1 || true
                 rm -f smoke-cookies.txt smoke-login.json
                 rm -rf "$WORKSPACE/.vex"
             '''

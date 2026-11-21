@@ -111,6 +111,10 @@ Rules:
 - Manual `allowed`/`blocked` modes override any stored schedule.
 - Schedules are evaluated by the background loop (default every 30 seconds)
   and applied only to explicitly managed devices.
+- Anonymous install tracking is opt-in. When enabled, the app stores a random
+  install ID locally and sends only that ID, the app version, a coarse platform
+  label, and the deployment type to the tracking service once per day. No IP or
+  network/device data is included.
 
 ### Why block/unblock rather than a true allowlist by default?
 
@@ -165,6 +169,7 @@ so both mechanisms can coexist.
 | `app/reconcile.py` | Discovery, drift detection, apply/audit, dry-run. |
 | `app/discipline.py` | Temporary speed-limit lifecycle and expiry restoration. |
 | `app/retention.py` | Audit retention settings, purge, and daily scheduling. |
+| `app/heartbeat.py` | Opt-in anonymous install heartbeat task. |
 | `app/routes/*` | JSON API for auth, devices, clients, audit, and system settings. |
 | `app/main.py` | Lifespan, scheduler task, security headers, SPA and license serving. |
 
@@ -366,6 +371,15 @@ The wording is deliberately neutral and parental-control oriented.
 | Speed-limit restore failure | The action stays active with an error and is retried on later scheduler cycles. |
 | Retention purge failure | Logged; the scheduler continues and retries on the next cycle. |
 | Scheduler disabled | Automatic sync and retention do not run; manual Sync/Purge still work. |
+
+### Install tracking service
+
+`telemetry/` contains a separate FastAPI + MySQL/MariaDB service for the public
+stats page at `unifiwifitool.smccloud.com`. It stores install ID, first/last
+seen, version, platform, and deployment only. Access logs are disabled at the
+application and reverse-proxy layers, and there are no IP columns in the
+database. The public page exposes aggregates; the admin page is HTTP Basic
+protected and shows anonymous install IDs.
 
 ## 11. Deployment
 

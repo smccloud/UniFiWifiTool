@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     scheduler_interval_seconds: int = Field(default=30, ge=5, le=3600)
     enable_ssid_allowlist: bool = False
 
+    # --- Anonymous install tracking (opt-in) -----------------------------
+    telemetry_enabled: bool = False
+    telemetry_url: str = "https://unifiwifitool.smccloud.com/api/v1/heartbeat"
+    telemetry_interval_seconds: int = Field(default=86400, ge=3600, le=604800)
+    deployment_type: str = "docker"
+
     @field_validator("log_level")
     @classmethod
     def _upper_log_level(cls, value: str) -> str:
@@ -73,6 +79,17 @@ class Settings(BaseSettings):
     @classmethod
     def _strip_host(cls, value: str) -> str:
         return value.strip().rstrip("/")
+
+    @field_validator("telemetry_url")
+    @classmethod
+    def _strip_telemetry_url(cls, value: str) -> str:
+        return value.strip().rstrip("/")
+
+    @field_validator("deployment_type")
+    @classmethod
+    def _clean_deployment_type(cls, value: str) -> str:
+        cleaned = "".join(ch for ch in value.lower() if ch.isalnum() or ch in {"_", "-"})
+        return cleaned[:32] or "docker"
 
     @field_validator("app_timezone")
     @classmethod
