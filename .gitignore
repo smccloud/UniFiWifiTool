@@ -20,7 +20,7 @@ data/
 *.db
 *.db-wal
 *.db-shm
-telemetry/test-results.xml
+telemetry/config.php
 
 # Environment / secrets
 .env

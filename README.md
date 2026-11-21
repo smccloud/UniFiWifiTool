@@ -263,7 +263,8 @@ TELEMETRY_URL=https://unifiwifitool.smccloud.com/api/v1/heartbeat
 DEPLOYMENT_TYPE=unraid
 ```
 
-The tracking service source and deployment notes are in
+The tracking service is a PHP 8 + MySQL/MariaDB application designed for
+shared hosting; it does not require Docker. Source and deployment notes are in
 [telemetry/](telemetry/README.md). The proposal and privacy requirements are
 tracked in [issue #3](https://github.com/smccloud/UniFiWifiTool/issues/3).
 

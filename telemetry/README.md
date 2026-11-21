@@ -1,86 +1,107 @@
-# Anonymous install tracking service
+# Anonymous install tracking service (PHP + MySQL)
 
-A small FastAPI + MySQL/MariaDB service that powers
-**https://unifiwifitool.smccloud.com**.
+This directory contains the shared-hosting service for
+**https://unifiwifitool.smccloud.com**. It runs on **PHP 8.2+ and
+MySQL/MariaDB**. It does **not** require Docker, Compose, Python, or Node.
 
-It stores only anonymous install heartbeats:
+The service stores only anonymous install data:
 
 - random install ID,
 - app version,
-- coarse platform (for example `linux/amd64`),
+- coarse platform (`linux/amd64`, `linux/arm64`),
 - deployment type (`docker`, `unraid`),
-- first seen,
-- last seen.
+- first and last seen timestamps.
 
-It does **not** store or log IP addresses, MAC addresses, SSIDs, hostnames,
-controller URLs, credentials, or device names.
+No IP addresses, MAC addresses, SSIDs, hostnames, controller URLs,
+credentials, or device names are collected or stored.
 
 ## Privacy design
 
-- The heartbeat endpoint does not accept a `Request` object, so it cannot read
-  or log the client IP.
-- Uvicorn runs with `--no-access-log`.
-- The reverse proxy must also discard access logs; see the Caddy example below.
+- The heartbeat handler never reads `REMOTE_ADDR` or request headers.
 - There are no IP columns in the database.
-- The public page shows aggregate counts only. Individual install IDs are
-  visible only in the authenticated admin section.
-- Client tracking is **opt-in**. The main application sends nothing unless
+- The public page shows aggregate counts only.
+- Individual install IDs are visible only behind HTTP Basic authentication.
+- Client tracking is **opt-in**: the main application sends nothing unless
   `TELEMETRY_ENABLED=true`.
+- Application errors are logged with a generic message, not request metadata.
 
-## Deploy
+### Shared-host access logs
 
-1. Create DNS for `unifiwifitool.smccloud.com` pointing at the host.
-2. Copy `.env.example` to `.env` and set strong passwords.
-3. Start the stack:
+The script cannot control the hosting provider's HTTP access logs. Ask the host
+whether access logs are enabled for this domain and whether they can be
+disabled or shortened. If they cannot, the application itself still does not
+store IPs, but the provider's access log may retain them outside the app.
 
-```bash
-docker compose up -d --build
-```
-
-The app binds to `127.0.0.1:8081`. Put a TLS reverse proxy in front of it.
-Caddy example:
-
-```caddyfile
-unifiwifitool.smccloud.com {
-    log {
-        output discard
-    }
-    reverse_proxy 127.0.0.1:8081
-}
-```
-
-The `log { output discard }` block is intentional: do not enable access logs
-for this host. For nginx, use `access_log off;`.
-
-## Pages
-
-- `/` — public aggregate stats.
-- `/api/v1/stats` — JSON stats.
-- `/admin` — HTTP Basic authenticated install list, filters, and prune button.
-- `/healthz` — container health check.
-
-Set `TELEMETRY_ADMIN_USERNAME` and `TELEMETRY_ADMIN_PASSWORD` for the admin
-section.
-
-## Database
-
-The service requires MySQL or MariaDB. `TELEMETRY_DATABASE_URL` uses the
-SQLAlchemy format:
+## Files
 
 ```text
-mysql+pymysql://telemetry:password@db:3306/telemetry
+telemetry/
+  public/                 document root
+    index.php             front controller / API / pages
+    .htaccess             rewrite non-file requests to index.php
+    assets/style.css
+  src/
+    bootstrap.php
+    database.php
+    auth.php
+    stats.php
+    views.php
+  db/migrations/001_initial.sql
+  config.example.php      copy to config.php, outside public/
 ```
 
-Use a URL-safe database password, or percent-encode special characters. The
-container runs `alembic upgrade head` before starting.
+## Deploy on shared hosting
 
-The `installs` table is defined in
-[`migrations/versions/0001_initial.py`](migrations/versions/0001_initial.py).
-Keep schema changes in new Alembic revisions.
+1. Upload this `telemetry/` directory so that `telemetry/public` is the
+   document root for `unifiwifitool.smccloud.com`.
+   - If the host will not let you change the document root, place the contents
+     of `public/` in the domain root and keep `src/` and `config.php` outside
+     the web root.
+2. Copy the configuration:
 
-Back up the MariaDB volume regularly. Retention runs automatically once per day
-and can also be triggered from the admin page; installs older than
-`TELEMETRY_RETENTION_DAYS` (default 90) are removed.
+   ```bash
+   cp config.example.php config.php
+   ```
+
+   Edit `config.php` with the MySQL/MariaDB host, database, user, password,
+   admin credentials, and retention period. Keep it outside `public/`.
+3. Import the schema with phpMyAdmin or the MySQL CLI:
+
+   ```bash
+   mysql -u USER -p DATABASE < db/migrations/001_initial.sql
+   ```
+
+   The database needs `installs` and `settings` tables. There is intentionally
+   no IP column.
+4. Ensure PHP has the `pdo_mysql` extension enabled.
+5. Enable HTTPS for the domain.
+6. Visit `/admin` and sign in with the Basic-auth credentials from
+   `config.php`.
+7. Send a test heartbeat:
+
+   ```bash
+   curl -i -X POST https://unifiwifitool.smccloud.com/api/v1/heartbeat \
+     -H 'Content-Type: application/json' \
+     -d '{"install_id":"11111111-1111-1111-1111-111111111111","app_version":"0.8.0","platform":"linux/amd64","deployment":"unraid","schema_version":1}'
+   ```
+
+   A valid request returns `204 No Content`. Then open `/` and `/admin` to
+   verify the install appears.
+
+## Routes
+
+- `/` — public aggregate stats.
+- `/api/v1/stats` — JSON aggregate stats.
+- `/api/v1/heartbeat` — anonymous heartbeat receiver.
+- `/admin` — HTTP Basic authenticated install list and filters.
+- `/admin/prune` — authenticated retention prune action.
+- `/healthz` — health check.
+
+## Retention
+
+`001_initial.sql` also creates the `settings` table used to throttle automatic
+pruning. The service prunes installs older than `retention_days` at most once
+per day, and the admin page can trigger pruning manually.
 
 ## Client configuration
 
@@ -93,15 +114,15 @@ DEPLOYMENT_TYPE=unraid
 TELEMETRY_INTERVAL_SECONDS=86400
 ```
 
-`TELEMETRY_ENABLED` defaults to `false`. Documentation must keep this opt-in
-behavior explicit.
+`TELEMETRY_ENABLED` defaults to `false`.
 
-## Development
+## Local checks
+
+Use the PHP binary available on the host:
 
 ```bash
-python -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pytest
+find . -name '*.php' -print0 | xargs -0 -n1 php -l
 ```
 
-The tests use SQLite for query logic; production uses MySQL/MariaDB.
+No database is required for syntax checks. There is no Docker deployment for
+this service.
