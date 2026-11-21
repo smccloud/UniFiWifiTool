@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models import AuditLog, Device
 from app.schedule import Schedule, load_schedule, schedule_to_dict
@@ -62,6 +62,31 @@ class ScheduleUpdate(BaseModel):
     apply: bool = True
 
 
+class DisciplineStart(BaseModel):
+    download_kbps: int = Field(ge=1, le=1_000_000)
+    upload_kbps: int = Field(ge=1, le=1_000_000)
+    duration_minutes: int | None = Field(default=None, ge=1, le=43_200)
+    expires_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def _one_expiry(self) -> "DisciplineStart":
+        if self.duration_minutes is not None and self.expires_at is not None:
+            raise ValueError("Provide duration_minutes or expires_at, not both")
+        return self
+
+
+class DisciplineOut(BaseModel):
+    id: int
+    status: str
+    download_kbps: int
+    upload_kbps: int
+    started_at: datetime
+    expires_at: datetime
+    ended_at: datetime | None = None
+    end_reason: str | None = None
+    last_error: str | None = None
+
+
 class DeviceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -89,6 +114,7 @@ class DeviceOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     connected: bool | None = None
+    discipline: DisciplineOut | None = None
 
 
 class DeviceList(BaseModel):
@@ -156,6 +182,7 @@ class ControllerInfo(BaseModel):
     integration_ok: bool
     classic_ok: bool
     ssid_allowlist_ok: bool
+    discipline_ok: bool
     version: str | None = None
     site: dict | None = None
     error: str | None = None
@@ -233,7 +260,11 @@ def schedule_out(schedule: Schedule) -> ScheduleOut:
     return ScheduleOut(**payload)
 
 
-def device_out(device: Device, connected: bool | None = None) -> DeviceOut:
+def device_out(
+    device: Device,
+    connected: bool | None = None,
+    discipline: DisciplineOut | None = None,
+) -> DeviceOut:
     schedule = load_schedule(device) if device.access_mode == "scheduled" else None
     return DeviceOut(
         id=device.id,
@@ -260,6 +291,21 @@ def device_out(device: Device, connected: bool | None = None) -> DeviceOut:
         created_at=device.created_at,
         updated_at=device.updated_at,
         connected=connected,
+        discipline=discipline,
+    )
+
+
+def discipline_out(action) -> DisciplineOut:  # noqa: ANN001
+    return DisciplineOut(
+        id=action.id,
+        status=action.status,
+        download_kbps=action.download_kbps,
+        upload_kbps=action.upload_kbps,
+        started_at=action.started_at,
+        expires_at=action.expires_at,
+        ended_at=action.ended_at,
+        end_reason=action.end_reason,
+        last_error=action.last_error,
     )
 
 

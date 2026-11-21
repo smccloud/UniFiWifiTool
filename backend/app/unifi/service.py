@@ -5,7 +5,7 @@ import time
 from app.config import Settings
 from app.timeutil import utcnow
 from app.unifi.classic import ClassicClient
-from app.unifi.errors import UniFiCapabilityError, UniFiError
+from app.unifi.errors import UniFiAPIError, UniFiCapabilityError, UniFiError
 from app.unifi.integration import IntegrationClient
 from app.unifi.types import (
     ControllerStatus,
@@ -84,11 +84,19 @@ class UniFiService:
                 try:
                     self.classic.login()
                     status.classic_ok = True
+                    try:
+                        self.classic.list_usergroups()
+                        status.discipline_ok = True
+                    except UniFiError as exc:
+                        status.warnings.append(
+                            f"Temporary speed limits unavailable: {exc}"
+                        )
                 except UniFiError as exc:
                     errors.append(f"Local admin API: {exc}")
             else:
                 status.warnings.append(
-                    "UNIFI_USERNAME/UNIFI_PASSWORD are not configured; block/unblock is unavailable"
+                    "UNIFI_USERNAME/UNIFI_PASSWORD are not configured; "
+                    "block/unblock and temporary speed limits are unavailable"
                 )
 
             if not status.integration_ok and not status.classic_ok:
@@ -132,6 +140,79 @@ class UniFiService:
                 "(UNIFI_USERNAME and UNIFI_PASSWORD). The official API key cannot perform this action."
             )
         self.classic.set_blocked(mac, blocked)
+
+    # -- temporary speed limits (classic user groups) ---------------------
+    def _require_discipline(self) -> ControllerStatus:
+        status = self.detect()
+        if not status.discipline_ok or self.classic is None:
+            raise UniFiCapabilityError(
+                "Temporary speed limits require a local admin session "
+                "(UNIFI_USERNAME and UNIFI_PASSWORD) and a controller with user-group support."
+            )
+        return status
+
+    def list_usergroups(self) -> list[dict]:
+        self._require_discipline()
+        return self.classic.list_usergroups()  # type: ignore[union-attr]
+
+    def get_client_group(
+        self, mac: str, client_id: str | None = None
+    ) -> tuple[str | None, str | None]:
+        self._require_discipline()
+        row = self.classic.get_client(mac)  # type: ignore[union-attr]
+        if row:
+            return str(row.get("_id") or client_id or ""), row.get("usergroup_id") or None
+        if client_id:
+            return client_id, None
+        raise UniFiCapabilityError(
+            "This device is not known to the controller yet. Connect it once before applying a speed limit."
+        )
+
+    def default_usergroup_id(self) -> str:
+        self._require_discipline()
+        groups = self.classic.list_usergroups()  # type: ignore[union-attr]
+        for group in groups:
+            if str(group.get("name", "")).casefold() == "default":
+                group_id = group.get("_id")
+                if group_id:
+                    return str(group_id)
+        for group in groups:
+            if (
+                group.get("attr_no_delete")
+                or (
+                    group.get("qos_rate_max_down") == -1
+                    and group.get("qos_rate_max_up") == -1
+                )
+            ):
+                group_id = group.get("_id")
+                if group_id:
+                    return str(group_id)
+        created = self.classic.create_usergroup(  # type: ignore[union-attr]
+            "UniFiWifiTool Unlimited", -1, -1
+        )
+        group_id = created.get("_id")
+        if not group_id:
+            raise UniFiAPIError("Could not create an unlimited bandwidth group")
+        return str(group_id)
+
+    def create_discipline_group(
+        self, name: str, download_kbps: int, upload_kbps: int
+    ) -> dict:
+        self._require_discipline()
+        group = self.classic.create_usergroup(  # type: ignore[union-attr]
+            name, download_kbps, upload_kbps
+        )
+        if not group.get("_id"):
+            raise UniFiAPIError("Controller did not return a bandwidth group ID")
+        return group
+
+    def assign_usergroup(self, client_id: str, group_id: str) -> None:
+        self._require_discipline()
+        self.classic.set_client_usergroup(client_id, group_id)  # type: ignore[union-attr]
+
+    def delete_usergroup(self, group_id: str) -> None:
+        self._require_discipline()
+        self.classic.delete_usergroup(group_id)  # type: ignore[union-attr]
 
     # -- SSID allowlist (official API, Network 10+) -----------------------
     def list_wifi_broadcasts(self) -> list[dict]:

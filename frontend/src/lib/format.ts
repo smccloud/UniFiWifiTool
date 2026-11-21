@@ -54,6 +54,14 @@ export function signalLabel(signal: number | null): string {
   return `${signal} dBm`;
 }
 
+export function formatSpeed(kbps: number): string {
+  if (kbps >= 1000) {
+    const mbps = kbps / 1000;
+    return `${Number(mbps.toFixed(mbps % 1 === 0 ? 0 : 1))} Mbps`;
+  }
+  return `${Math.round(kbps)} Kbps`;
+}
+
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);

@@ -16,6 +16,7 @@ import {
   describeSchedule,
   errorMessage,
   formatDateTime,
+  formatSpeed,
   relativeTime,
   signalLabel,
 } from "./lib/format";
@@ -39,6 +40,21 @@ function deviceName(device: Device): string {
 function clientName(client: Client): string {
   return client.label || client.name || client.hostname || "Unknown device";
 }
+
+// UniFi stores bandwidth rates as whole Kbps. Fractional presets are rounded
+// before being sent, and the exact values are shown in the preview.
+const SPEED_PRESETS: Array<{
+  label: string;
+  download: number;
+  upload: number;
+}> = [
+  { label: "1 Mbps", download: 1000, upload: 1000 },
+  { label: "768 Kbps", download: 768, upload: 768 },
+  { label: "14.4 Kbps", download: 14.4, upload: 14.4 },
+  { label: "28.8 Kbps", download: 28.8, upload: 28.8 },
+  { label: "33.6 Kbps symmetrical", download: 33.6, upload: 33.6 },
+  { label: "56 down / 33.6 up Kbps", download: 56, upload: 33.6 },
+];
 
 
 // ---------------------------------------------------------------------------
@@ -399,6 +415,14 @@ export function DevicesPage({
                     </td>
                     <td>
                       <AccessBadge mode={device.effective_access} />
+                      {device.discipline ? (
+                        <span
+                          className="badge badge-scheduled"
+                          title={`Speed limited until ${formatDateTime(device.discipline.expires_at)}`}
+                        >
+                          Speed limited
+                        </span>
+                      ) : null}
                     </td>
                     <td>
                       <div>{device.last_ssid ?? "—"}</div>
@@ -590,6 +614,12 @@ function DeviceDrawer({
   const [notes, setNotes] = useState(device.notes);
   const [accessMode, setAccessMode] = useState<string>(device.access_mode);
   const [saving, setSaving] = useState(false);
+  const [disciplineBusy, setDisciplineBusy] = useState(false);
+  const [downLimit, setDownLimit] = useState("1");
+  const [upLimit, setUpLimit] = useState("1");
+  const [speedUnit, setSpeedUnit] = useState<"Mbps" | "Kbps">("Mbps");
+  const [duration, setDuration] = useState("60");
+  const [customMinutes, setCustomMinutes] = useState("60");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -648,6 +678,97 @@ function DeviceDrawer({
     }
   }
 
+  const speedFactor = speedUnit === "Mbps" ? 1000 : 1;
+  const downloadKbps = Math.round(Number(downLimit) * speedFactor);
+  const uploadKbps = Math.round(Number(upLimit) * speedFactor);
+  const minutes = duration === "custom" ? Number(customMinutes) : Number(duration);
+  const speedMathValid =
+    Number.isFinite(downloadKbps) &&
+    downloadKbps >= 1 &&
+    downloadKbps <= 1_000_000 &&
+    Number.isFinite(uploadKbps) &&
+    uploadKbps >= 1 &&
+    uploadKbps <= 1_000_000;
+  const durationValid = Number.isFinite(minutes) && minutes >= 1 && minutes <= 43_200;
+
+  function changeSpeedUnit(nextUnit: "Mbps" | "Kbps") {
+    if (nextUnit === speedUnit) return;
+    const convert = (value: string) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return value;
+      const converted = nextUnit === "Kbps" ? numeric * 1000 : numeric / 1000;
+      return String(Number(converted.toFixed(3)));
+    };
+    setDownLimit(convert);
+    setUpLimit(convert);
+    setSpeedUnit(nextUnit);
+  }
+
+  function applySpeedPreset(preset: (typeof SPEED_PRESETS)[number]) {
+    setSpeedUnit("Kbps");
+    setDownLimit(String(Math.round(preset.download)));
+    setUpLimit(String(Math.round(preset.upload)));
+  }
+
+  function speedDetail(kbps: number): string {
+    return kbps >= 1000 ? `${formatSpeed(kbps)} (${kbps} Kbps)` : formatSpeed(kbps);
+  }
+
+  function durationLabel(value: number): string {
+    if (value % 1440 === 0 && value >= 1440) return `${value / 1440} day(s)`;
+    if (value % 60 === 0 && value >= 60) return `${value / 60} hour(s)`;
+    return `${value} minute(s)`;
+  }
+
+  async function applyDiscipline() {
+    if (!speedMathValid) {
+      setError(
+        speedUnit === "Mbps"
+          ? "Speed limits must be between 0.001 and 1000 Mbps."
+          : "Speed limits must be between 1 and 1,000,000 Kbps.",
+      );
+      return;
+    }
+    if (!durationValid) {
+      setError("Duration must be between 1 minute and 30 days.");
+      return;
+    }
+
+    // The API and UniFi user groups use Kbps. Convert only after validating
+    // both the entered value and the resulting rounded Kbps value.
+    setDisciplineBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const updated = await api.startDiscipline(device.id, {
+        download_kbps: downloadKbps,
+        upload_kbps: uploadKbps,
+        duration_minutes: minutes,
+      });
+      onUpdated(updated);
+      setNotice("Temporary speed limit applied. Access remains available.");
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setDisciplineBusy(false);
+    }
+  }
+
+  async function stopDiscipline() {
+    setDisciplineBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const updated = await api.endDiscipline(device.id);
+      onUpdated(updated);
+      setNotice("Normal WiFi speed restored.");
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setDisciplineBusy(false);
+    }
+  }
+
   async function remove() {
     if (!window.confirm(`Remove ${deviceName(device)} from the local inventory? UniFi block state is not changed.`)) {
       return;
@@ -662,7 +783,9 @@ function DeviceDrawer({
     }
   }
 
-  const disabled = busy || saving;
+  const disabled = busy || saving || disciplineBusy;
+  const discipline = device.discipline;
+  const disciplineOk = status?.controller.discipline_ok ?? false;
 
   return (
     <div className="drawer-backdrop" onMouseDown={onClose} role="presentation">
@@ -685,6 +808,7 @@ function DeviceDrawer({
           <div className="drawer-badges">
             <AccessBadge mode={device.access_mode} />
             <AccessBadge mode={device.effective_access} label={`Effective: ${device.effective_access ?? "unknown"}`} />
+            {device.discipline ? <span className="badge badge-scheduled">Speed limited</span> : null}
             {device.source === "discovered" ? <span className="badge badge-ignored">Discovered</span> : null}
           </div>
 
@@ -734,6 +858,156 @@ function DeviceDrawer({
                 </button>
               </div>
             </div>
+          </div>
+
+          <div className="drawer-section">
+            <div className="section-heading">
+              <h3>Discipline Mode</h3>
+              {discipline ? <span className="badge badge-scheduled">Speed limited</span> : null}
+            </div>
+            <p className="muted small">
+              Temporarily reduce this device&apos;s WiFi speed while keeping it connected. This is
+              a parental-control option, not a network block.
+            </p>
+            {!disciplineOk ? (
+              <InfoBanner>
+                Temporary speed limits require local admin credentials and controller support for
+                bandwidth user groups.
+              </InfoBanner>
+            ) : null}
+
+            {discipline ? (
+              <div className="form-stack">
+                <div className="key-values compact">
+                  <div>
+                    <span>Current limit</span>
+                    <strong>
+                      {formatSpeed(discipline.download_kbps)} down /{" "}
+                      {formatSpeed(discipline.upload_kbps)} up
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Ends</span>
+                    <strong title={formatDateTime(discipline.expires_at)}>
+                      {relativeTime(discipline.expires_at)} ({formatDateTime(discipline.expires_at)})
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Status</span>
+                    <strong>{discipline.status}</strong>
+                  </div>
+                </div>
+                {discipline.last_error ? <ErrorBanner message={discipline.last_error} /> : null}
+                <button
+                  className="button button-danger-ghost"
+                  onClick={stopDiscipline}
+                  disabled={disabled}
+                >
+                  {disciplineBusy ? "Restoring…" : "End speed limit"}
+                </button>
+              </div>
+            ) : (
+              <div className="form-stack">
+                <div className="preset-row">
+                  {SPEED_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      className="chip"
+                      disabled={disabled || !disciplineOk}
+                      onClick={() => applySpeedPreset(preset)}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="muted small">
+                  Presets use whole Kbps. Fractional values (14.4, 28.8, 33.6) are
+                  rounded before the limit is sent to UniFi.
+                </p>
+                <div className="form-grid two">
+                  <label>
+                    <span>Download limit ({speedUnit})</span>
+                    <input
+                      type="number"
+                      min={speedUnit === "Mbps" ? 0.001 : 1}
+                      step={speedUnit === "Mbps" ? 0.1 : 1}
+                      value={downLimit}
+                      onChange={(event) => setDownLimit(event.target.value)}
+                      disabled={disabled || !disciplineOk}
+                    />
+                  </label>
+                  <label>
+                    <span>Upload limit ({speedUnit})</span>
+                    <input
+                      type="number"
+                      min={speedUnit === "Mbps" ? 0.001 : 1}
+                      step={speedUnit === "Mbps" ? 0.1 : 1}
+                      value={upLimit}
+                      onChange={(event) => setUpLimit(event.target.value)}
+                      disabled={disabled || !disciplineOk}
+                    />
+                  </label>
+                </div>
+                <label>
+                  <span>Speed units</span>
+                  <select
+                    value={speedUnit}
+                    onChange={(event) => changeSpeedUnit(event.target.value as "Mbps" | "Kbps")}
+                    disabled={disabled || !disciplineOk}
+                  >
+                    <option value="Mbps">Mbps (megabits per second)</option>
+                    <option value="Kbps">Kbps (kilobits per second)</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Duration</span>
+                  <select
+                    value={duration}
+                    onChange={(event) => setDuration(event.target.value)}
+                    disabled={disabled || !disciplineOk}
+                  >
+                    <option value="30">30 minutes</option>
+                    <option value="60">1 hour</option>
+                    <option value="120">2 hours</option>
+                    <option value="240">4 hours</option>
+                    <option value="480">8 hours</option>
+                    <option value="custom">Custom…</option>
+                  </select>
+                </label>
+                {duration === "custom" ? (
+                  <label>
+                    <span>Custom duration (minutes)</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={43200}
+                      value={customMinutes}
+                      onChange={(event) => setCustomMinutes(event.target.value)}
+                      disabled={disabled || !disciplineOk}
+                    />
+                  </label>
+                ) : null}
+                <div className="schedule-preview">
+                  {speedMathValid && durationValid ? (
+                    <>
+                      Will apply <strong>{speedDetail(downloadKbps)}</strong> down /{" "}
+                      <strong>{speedDetail(uploadKbps)}</strong> up for{" "}
+                      {durationLabel(minutes)}.
+                    </>
+                  ) : (
+                    "Enter valid speed limits and a duration to see the values that will be sent to UniFi."
+                  )}
+                </div>
+                <button
+                  className="button button-primary"
+                  onClick={applyDiscipline}
+                  disabled={disabled || !disciplineOk || !speedMathValid || !durationValid}
+                >
+                  {disciplineBusy ? "Applying…" : "Apply temporary speed limit"}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="drawer-section">
@@ -1039,6 +1313,8 @@ export function AuditPage({ refreshKey }: { refreshKey: number }) {
               <option value="schedule_cleared">Schedule cleared</option>
               <option value="device_added">Device added</option>
               <option value="device_removed">Device removed</option>
+              <option value="discipline_started">Speed limit started</option>
+              <option value="discipline_ended">Speed limit ended</option>
               <option value="sync">Sync</option>
               <option value="login">Login</option>
               <option value="audit_retention_changed">Retention changed</option>
@@ -1305,6 +1581,10 @@ export function SettingsPage({
             <div>
               <span>SSID allowlist API</span>
               <strong>{controller.ssid_allowlist_ok ? "Available" : "Not available"}</strong>
+            </div>
+            <div>
+              <span>Temporary speed limits</span>
+              <strong>{controller.discipline_ok ? "Available" : "Not available"}</strong>
             </div>
           </div>
           {controller.error ? <ErrorBanner message={controller.error} /> : null}

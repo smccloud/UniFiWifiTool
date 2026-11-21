@@ -14,6 +14,18 @@ export interface Schedule {
   windows: ScheduleWindow[];
 }
 
+export interface Discipline {
+  id: number;
+  status: string;
+  download_kbps: number;
+  upload_kbps: number;
+  started_at: string;
+  expires_at: string;
+  ended_at: string | null;
+  end_reason: string | null;
+  last_error: string | null;
+}
+
 export interface Device {
   id: number;
   mac: string;
@@ -39,6 +51,7 @@ export interface Device {
   created_at: string;
   updated_at: string;
   connected: boolean | null;
+  discipline: Discipline | null;
 }
 
 export interface DeviceList {
@@ -104,6 +117,7 @@ export interface ControllerInfo {
   integration_ok: boolean;
   classic_ok: boolean;
   ssid_allowlist_ok: boolean;
+  discipline_ok: boolean;
   version: string | null;
   site: { id: string | null; name: string | null } | null;
   error: string | null;

@@ -13,6 +13,9 @@ Docker deployment.
 - Allows, blocks, or leaves devices unmanaged through the UniFi controller.
 - Supports **per-client time-based access** with custom allow and block windows
   in the same weekly schedule. Block windows win over allow windows.
+- Supports **Discipline Mode**: temporarily reduce a specific device's WiFi
+  speed (download and upload limits) for a chosen duration, then restore its
+  previous bandwidth group automatically.
 - Timezone-aware, with overnight windows and a configurable fallback state.
 - Applies schedule transitions automatically in the background.
 - Keeps an audit log of every login, change, block, and unblock, with configurable retention.
@@ -202,6 +205,41 @@ each transition in the audit log.
 Use the theme switch in the top bar to choose **System**, **Light**, or **Dark**.
 The choice is stored in the browser and follows OS changes while set to System.
 
+## Temporary speed limits (Discipline Mode)
+
+Discipline Mode is a parental-control option that temporarily **reduces a
+device's WiFi speed** without blocking it. This keeps the device connected for
+homework, emergency contact, or other legitimate use while applying a
+proportionate limit.
+
+Open a device → **Discipline Mode**:
+
+- Set download and upload limits in **Mbps or Kbps**. The UI converts the
+  entered values to Kbps and shows the exact values that will be sent before
+  anything is applied.
+- Quick presets: **1 Mbps**, **768 Kbps**, **14.4 Kbps**, **28.8 Kbps**,
+  **33.6 Kbps symmetrical**, and **56 Kbps down / 33.6 Kbps up**. UniFi stores
+  whole Kbps, so fractional presets are rounded (for example, 33.6 Kbps becomes
+  34 Kbps) and the preview shows the rounded value.
+- Choose a duration (30 minutes, 1 hour, 2 hours, 4 hours, 8 hours, or a custom
+  number of minutes).
+- Apply the limit. The app validates the converted Kbps values, creates a
+  temporary UniFi bandwidth user group, and assigns it to the device.
+- The previous bandwidth group is restored automatically when the duration
+  expires.
+- Use **End speed limit** to restore normal speed early.
+- Active limits show their expiry in the device list and device drawer.
+- Starting, ending, and automatic restoration are written to the audit log.
+
+The API uses `download_kbps` / `upload_kbps` fields because UniFi user groups
+are expressed in Kbps. This feature needs the local admin credentials
+(`UNIFI_USERNAME` / `UNIFI_PASSWORD`), because it uses UniFi's classic
+user-group API. If the
+controller does not support user groups, the UI reports that temporary speed
+limits are unavailable rather than blocking the device. Automatic restoration
+runs in the scheduler loop; with `SCHEDULER_ENABLED=false`, use **End speed
+limit** manually.
+
 ## Audit retention
 
 The audit log keeps login, access-change, block, and unblock history. By
@@ -341,6 +379,9 @@ agents where bridge/veth creation is unavailable.
 | `SCHEDULER_ENABLED` | `true` | Background reconciliation and retention loop. |
 | `SCHEDULER_INTERVAL_SECONDS` | `30` | Transition check interval. |
 | `ENABLE_SSID_ALLOWLIST` | `false` | Experimental per-SSID MAC filter writes. |
+
+Discipline Mode has no dedicated environment variables; it uses the classic
+controller credentials described above.
 
 See [.env.example](.env.example) for the full list.
 

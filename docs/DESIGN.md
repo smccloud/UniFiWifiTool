@@ -23,6 +23,7 @@ This application is a single-container web app for those tasks.
 - Manage a local inventory of WiFi devices keyed by MAC address.
 - Allow, block, or leave devices unmanaged.
 - Support weekly, timezone-aware access schedules, including overnight windows.
+- Support temporary per-device WiFi speed limits for parental control.
 - Apply access changes automatically in the background and record every action.
 - Run as one non-root Docker container with SQLite on a volume.
 - Work with UniFi OS consoles (UDM, Cloud Gateway, etc.) and current Network
@@ -162,6 +163,7 @@ so both mechanisms can coexist.
 | `app/unifi/classic.py` | Login, CSRF rotation, `/stat/sta`, `/cmd/stamgr`. |
 | `app/unifi/service.py` | Capability detection and high-level operations. |
 | `app/reconcile.py` | Discovery, drift detection, apply/audit, dry-run. |
+| `app/discipline.py` | Temporary speed-limit lifecycle and expiry restoration. |
 | `app/retention.py` | Audit retention settings, purge, and daily scheduling. |
 | `app/routes/*` | JSON API for auth, devices, clients, audit, and system settings. |
 | `app/main.py` | Lifespan, scheduler task, security headers, SPA and license serving. |
@@ -185,6 +187,13 @@ so both mechanisms can coexist.
 Append-only except for configured retention: timestamp, actor, action, target
 MAC, result, JSON detail, request ID. Secrets are never recorded. Purging and
 retention changes are themselves audited.
+
+`discipline_actions`
+
+Active and historical temporary speed limits: device/MAC, download/upload
+Kbps, start/expiry/end timestamps, previous and temporary UniFi user-group IDs,
+client ID, actor, end reason, and last error. A device can have at most one
+active action.
 
 `settings`
 
@@ -239,6 +248,22 @@ forever (the default). A positive value deletes rows older than that many days
 - The last cleanup timestamp and deleted count are stored in `last_audit_purge`
   and shown in the UI.
 
+### Temporary speed limits (Discipline Mode)
+
+UniFi applies per-client bandwidth limits through **user groups** (bandwidth
+profiles), not a single per-client speed field. Starting a limit:
+
+1. Look up the client and remember its current `usergroup_id`.
+2. Create a temporary user group with the requested download/upload Kbps.
+3. Assign the temporary group to the client via `/upd/user/{id}`.
+4. Persist the action, previous group, expiry, and audit entry.
+
+Ending a limit (manual or expired) restores the previous group (or a default
+unlimited group), deletes the temporary group, and records the result. The
+scheduler checks for expired actions independently of normal sync. Capability
+detection verifies that the classic API and user-group endpoints are available;
+otherwise the UI disables the feature.
+
 ## 7. HTTP API
 
 | Method | Path | Purpose |
@@ -249,6 +274,9 @@ forever (the default). A positive value deletes rows older than that many days
 | GET | `/api/system/status` | Capabilities, counts, enforcement settings, last sync. |
 | POST | `/api/system/sync` | Run discovery + reconciliation. |
 | POST | `/api/system/test` | Force capability re-detection. |
+| POST | `/api/devices/{id}/discipline` | Start a temporary speed limit. |
+| GET | `/api/devices/{id}/discipline` | Read the active temporary speed limit. |
+| DELETE | `/api/devices/{id}/discipline` | Restore normal speed early. |
 | PUT | `/api/system/audit-retention` | Set runtime audit retention and purge once. |
 | POST | `/api/system/audit-purge` | Run audit retention cleanup immediately. |
 | GET | `/api/license` | License metadata and full text. |
@@ -293,6 +321,14 @@ overnight, block weekdays, weekend access), day toggles, timezone selection,
 multiple windows, per-window allow/block actions, a fallback state, and a
 plain-English preview. Block windows are evaluated before allow windows.
 
+The Discipline Mode panel provides download/upload limits in Mbps or Kbps,
+quick presets (1 Mbps, 768 Kbps, 14.4 Kbps, 28.8 Kbps, 33.6 Kbps symmetrical,
+and 56/33.6 Kbps), unit conversion with an exact Kbps preview, duration presets
+or a custom duration, an active-limit expiry display, and an early **End speed
+limit** action. UniFi stores whole Kbps, so fractional presets are rounded and
+the preview shows the resulting values before the controller call.
+The wording is deliberately neutral and parental-control oriented.
+
 ## 9. Security
 
 - Single admin account; password stored as scrypt hash (or supplied as a hash).
@@ -327,6 +363,7 @@ plain-English preview. Block windows are evaluated before allow windows.
 | Corrupt schedule | Fails closed to `blocked` and records an error on the device. |
 | Sync overlap | Manual sync returns 409; background run is skipped. |
 | Partial failure | Per-device errors are recorded; other devices still reconcile. |
+| Speed-limit restore failure | The action stays active with an error and is retried on later scheduler cycles. |
 | Retention purge failure | Logged; the scheduler continues and retries on the next cycle. |
 | Scheduler disabled | Automatic sync and retention do not run; manual Sync/Purge still work. |
 
@@ -395,3 +432,7 @@ Before relying on enforcement, verify:
       cutoff; setting `0` stops automatic deletion.
 - [ ] `/api/license` and `/LICENSE` return the MIT license, and Settings →
       About shows the same text.
+- [ ] A temporary speed limit creates a user group, assigns the client, and
+      restores the previous group after expiry.
+- [ ] Manual early restoration works and removes the temporary group.
+- [ ] The device shows the active speed limit and expiry.

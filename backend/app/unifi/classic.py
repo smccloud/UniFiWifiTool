@@ -214,6 +214,7 @@ class ClassicClient:
                     last_seen_at=epoch_to_datetime(row.get("last_seen")),
                     source="classic",
                     unifi_client_id=row.get("_id") or row.get("user_id"),
+                    usergroup_id=row.get("usergroup_id") or None,
                     connection_type=connection_type,
                 )
             )
@@ -222,6 +223,80 @@ class ClassicClient:
     def set_blocked(self, mac: str, blocked: bool) -> None:
         cmd = "block-sta" if blocked else "unblock-sta"
         self._request("POST", "/cmd/stamgr", json_body={"cmd": cmd, "mac": mac})
+
+    # -- bandwidth user groups -------------------------------------------
+    def list_usergroups(self) -> list[dict]:
+        payload = self._request("GET", "/list/usergroup")
+        data = payload.get("data") or []
+        if isinstance(data, dict):
+            data = data.get("data") or []
+        return [row for row in data if isinstance(row, dict)]
+
+    def create_usergroup(self, name: str, download_kbps: int, upload_kbps: int) -> dict:
+        payload = self._request(
+            "POST",
+            "/rest/usergroup",
+            json_body={
+                "name": name,
+                "qos_rate_max_down": download_kbps,
+                "qos_rate_max_up": upload_kbps,
+            },
+        )
+        data = payload.get("data") or []
+        if isinstance(data, list) and data and isinstance(data[0], dict):
+            return data[0]
+        if isinstance(data, dict):
+            return data
+        return {}
+
+    def delete_usergroup(self, group_id: str) -> None:
+        self._request("DELETE", f"/rest/usergroup/{group_id}")
+
+    def set_client_usergroup(self, client_id: str, group_id: str) -> None:
+        self._request(
+            "POST",
+            f"/upd/user/{client_id}",
+            json_body={"usergroup_id": group_id},
+        )
+
+    def get_client(self, mac: str) -> dict | None:
+        for path, params in (
+            ("/stat/sta", {"mac": mac}),
+            (f"/stat/user/{mac}", None),
+        ):
+            try:
+                payload = self._request("GET", path, params=params)
+            except UniFiAPIError:
+                continue
+            for row in _data_rows(payload):
+                try:
+                    if normalize_mac(str(row.get("mac", ""))) == mac:
+                        return row
+                except ValueError:
+                    continue
+        return None
+
+
+def _data_rows(payload: Any) -> list[dict]:
+    if not isinstance(payload, dict):
+        return []
+    data = payload.get("data")
+    if isinstance(data, list):
+        return [row for row in data if isinstance(row, dict)]
+    if isinstance(data, dict):
+        return [data]
+    return []
+
+
+def _first_data(payload: Any) -> dict | None:
+    if not isinstance(payload, dict):
+        return None
+    data = payload.get("data")
+    if isinstance(data, list):
+        return data[0] if data and isinstance(data[0], dict) else None
+    if isinstance(data, dict):
+        return data
+    return None
 
 
 def _safe_json(response: httpx.Response) -> Any:

@@ -46,6 +46,7 @@ def _controller_info(service: UniFiService) -> ControllerInfo:
         integration_ok=status.integration_ok,
         classic_ok=status.classic_ok,
         ssid_allowlist_ok=status.ssid_allowlist_ok,
+        discipline_ok=status.discipline_ok,
         version=status.version,
         site=site,
         error=status.error,

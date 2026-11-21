@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Index, Integer, String, Text, or_
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, or_
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, UTCDateTime
@@ -61,6 +61,32 @@ class Device(Base):
 # The inventory is WiFi-only. Rows that have not been observed yet (NULL) stay
 # visible; once the controller reports a device as wired, it is hidden.
 WIRELESS_ONLY = or_(Device.connection_type.is_(None), Device.connection_type != "wired")
+
+
+class DisciplineAction(Base):
+    """A temporary per-client bandwidth limit implemented with a user group."""
+
+    __tablename__ = "discipline_actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[int] = mapped_column(
+        ForeignKey("devices.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    mac: Mapped[str] = mapped_column(String(17), index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="active", index=True)
+    download_kbps: Mapped[int] = mapped_column(Integer, nullable=False)
+    upload_kbps: Mapped[int] = mapped_column(Integer, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime, index=True, nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    previous_usergroup_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    temp_usergroup_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    unifi_client_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(64), default="system")
+    end_reason: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (Index("ix_discipline_status_expiry", "status", "expires_at"),)
 
 
 class AuditLog(Base):

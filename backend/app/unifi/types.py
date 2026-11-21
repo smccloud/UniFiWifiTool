@@ -66,6 +66,7 @@ class LiveClient:
     last_seen_at: datetime | None = None
     source: str = "classic"
     unifi_client_id: str | None = None
+    usergroup_id: str | None = None
     connection_type: str | None = None
 
 
@@ -75,6 +76,7 @@ class ControllerStatus:
     integration_ok: bool = False
     classic_ok: bool = False
     ssid_allowlist_ok: bool = False
+    discipline_ok: bool = False
     version: str | None = None
     site_id: str | None = None
     site_name: str | None = None
@@ -88,6 +90,7 @@ class ControllerStatus:
             "integrationOk": self.integration_ok,
             "classicOk": self.classic_ok,
             "ssidAllowlistOk": self.ssid_allowlist_ok,
+            "disciplineOk": self.discipline_ok,
             "version": self.version,
             "site": (
                 {"id": self.site_id, "name": self.site_name}

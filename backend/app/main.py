@@ -15,6 +15,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app import __version__
 from app.config import Settings, get_settings
 from app.db import dispose_engine, get_session_factory, init_db
+from app.discipline import expire_due_actions
 from app.reconcile import SyncBusy, run_sync
 from app.retention import purge_if_due
 from app.routes import audit, auth, clients, devices, system
@@ -52,6 +53,14 @@ def _sync_once(service: UniFiService, settings: Settings) -> None:
                 logger.info("audit retention: deleted=%s old entries", purge.deleted)
         except Exception:  # noqa: BLE001 - retention must not stop the scheduler
             logger.exception("audit retention purge failed")
+
+        # Temporary speed limits are independent of the normal sync result.
+        try:
+            ended = expire_due_actions(session, service)
+            if ended:
+                logger.info("discipline: restored %s expired speed limit(s)", ended)
+        except Exception:  # noqa: BLE001 - discipline expiry must not stop the scheduler
+            logger.exception("discipline expiry failed")
     finally:
         session.close()
 

@@ -9,7 +9,13 @@ from app.auth import csrf_guard, require_user
 from app.config import get_settings
 from app.db import get_db
 from app.deps import get_request_id, get_service
-from app.models import WIRELESS_ONLY, Device
+from app.discipline import (
+    active_discipline,
+    compute_expiry,
+    end_discipline,
+    start_discipline,
+)
+from app.models import WIRELESS_ONLY, Device, DisciplineAction
 from app.reconcile import apply_device_now, refresh_device_state
 from app.schedule import ScheduleError, clear_schedule, save_schedule, validate_schedule
 from app.schemas import (
@@ -17,8 +23,11 @@ from app.schemas import (
     DeviceList,
     DeviceOut,
     DeviceUpdate,
+    DisciplineOut,
+    DisciplineStart,
     ScheduleUpdate,
     device_out,
+    discipline_out,
 )
 from app.unifi.errors import UniFiError
 from app.unifi.service import UniFiService
@@ -36,6 +45,15 @@ def _get_device(db: Session, device_id: int) -> Device:
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
     return device
+
+
+def _device_response(db: Session, device: Device, connected: bool | None = None) -> DeviceOut:
+    action = active_discipline(db, device.id)
+    return device_out(
+        device,
+        connected=connected,
+        discipline=discipline_out(action) if action else None,
+    )
 
 
 @router.get("", response_model=DeviceList)
@@ -68,12 +86,30 @@ def list_devices(
     devices = (
         query.order_by(Device.updated_at.desc()).offset(offset).limit(limit).all()
     )
-    return DeviceList(items=[device_out(device) for device in devices], total=total)
+    active = {
+        action.device_id: action
+        for action in db.query(DisciplineAction)
+        .filter(
+            DisciplineAction.device_id.in_([device.id for device in devices]),
+            DisciplineAction.status == "active",
+        )
+        .all()
+    }
+    return DeviceList(
+        items=[
+            device_out(
+                device,
+                discipline=discipline_out(active[device.id]) if device.id in active else None,
+            )
+            for device in devices
+        ],
+        total=total,
+    )
 
 
 @router.get("/{device_id}", response_model=DeviceOut)
 def get_device(device_id: int, db: Session = Depends(get_db)):
-    return device_out(_get_device(db, device_id))
+    return _device_response(db, _get_device(db, device_id))
 
 
 @router.post("", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)
@@ -126,7 +162,7 @@ def create_device(
         db.commit()
         db.refresh(device)
 
-    return device_out(device)
+    return _device_response(db, device)
 
 
 @router.patch("/{device_id}", response_model=DeviceOut)
@@ -177,7 +213,7 @@ def update_device(
         db.commit()
         db.refresh(device)
 
-    return device_out(device)
+    return _device_response(db, device)
 
 
 @router.delete("/{device_id}")
@@ -188,6 +224,11 @@ def delete_device(
     user: str = Depends(require_user),
 ):
     device = _get_device(db, device_id)
+    if active_discipline(db, device.id) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="End the active temporary speed limit before removing this device",
+        )
     mac = device.mac
     label = device.label
     db.delete(device)
@@ -245,7 +286,7 @@ def set_schedule(
     db.commit()
     db.refresh(device)
 
-    return device_out(device)
+    return _device_response(db, device)
 
 
 @router.delete("/{device_id}/schedule", response_model=DeviceOut)
@@ -269,7 +310,7 @@ def remove_schedule(
     )
     db.commit()
     db.refresh(device)
-    return device_out(device)
+    return _device_response(db, device)
 
 
 @router.post("/{device_id}/apply", response_model=DeviceOut)
@@ -294,4 +335,70 @@ def apply_now(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     db.commit()
     db.refresh(device)
-    return device_out(device)
+    return _device_response(db, device)
+
+
+@router.get("/{device_id}/discipline", response_model=DisciplineOut | None)
+def get_discipline(device_id: int, db: Session = Depends(get_db)):
+    device = _get_device(db, device_id)
+    action = active_discipline(db, device.id)
+    return discipline_out(action) if action else None
+
+
+@router.post("/{device_id}/discipline", response_model=DeviceOut)
+def start_device_discipline(
+    device_id: int,
+    payload: DisciplineStart,
+    request: Request,
+    db: Session = Depends(get_db),
+    service: UniFiService = Depends(get_service),
+    user: str = Depends(require_user),
+):
+    device = _get_device(db, device_id)
+    try:
+        expires_at = compute_expiry(payload.duration_minutes, payload.expires_at)
+        start_discipline(
+            db,
+            service,
+            device,
+            download_kbps=payload.download_kbps,
+            upload_kbps=payload.upload_kbps,
+            expires_at=expires_at,
+            actor=user,
+            request_id=get_request_id(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except UniFiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    db.refresh(device)
+    return _device_response(db, device)
+
+
+@router.delete("/{device_id}/discipline", response_model=DeviceOut)
+def end_device_discipline(
+    device_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    service: UniFiService = Depends(get_service),
+    user: str = Depends(require_user),
+):
+    device = _get_device(db, device_id)
+    action = active_discipline(db, device.id)
+    if action is None:
+        raise HTTPException(status_code=404, detail="No active temporary speed limit")
+
+    ok, error = end_discipline(
+        db,
+        service,
+        action,
+        actor=user,
+        reason="manual",
+        request_id=get_request_id(request),
+    )
+    if not ok:
+        raise HTTPException(status_code=502, detail=error or "Could not restore the speed limit")
+
+    db.refresh(device)
+    return _device_response(db, device)

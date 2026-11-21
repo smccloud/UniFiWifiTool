@@ -160,6 +160,18 @@ export const api = {
   applyDevice: (id: number) =>
     request<Device>(`/api/devices/${id}/apply`, { method: "POST" }),
 
+  startDiscipline: (
+    id: number,
+    payload: { download_kbps: number; upload_kbps: number; duration_minutes?: number },
+  ) =>
+    request<Device>(`/api/devices/${id}/discipline`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  endDiscipline: (id: number) =>
+    request<Device>(`/api/devices/${id}/discipline`, { method: "DELETE" }),
+
   clients: (includeWired = false) =>
     request<ClientList>(`/api/clients${query({ include_wired: includeWired })}`),
 
