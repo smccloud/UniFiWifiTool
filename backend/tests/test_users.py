@@ -245,3 +245,18 @@ def test_viewer_cannot_mutate_devices(client: TestClient):
         headers={"X-CSRF-Token": viewer_token},
     )
     assert response.status_code == 403
+
+
+def test_admin_can_create_device(client: TestClient):
+    complete_setup(client)
+    token = client.get("/api/auth/me").json()["csrf_token"]
+
+    response = client.post(
+        "/api/devices",
+        json={"mac": "aa:bb:cc:dd:ee:01", "label": "CI"},
+        headers={"X-CSRF-Token": token},
+    )
+    assert response.status_code == 201, response.text
+    device = response.json()
+    assert device["mac"] == "aa:bb:cc:dd:ee:01"
+    assert device["created_by"] == "Admin"
