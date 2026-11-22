@@ -6,8 +6,8 @@ This image is designed to run directly through unRAID's **Docker** tab
 ## 1. Use the published image
 
 The Jenkins pipeline publishes `smccloud/unifi-wifi-tool:latest` to Docker Hub
-on successful `master` builds, along with the version tag (currently `1.1.1`).
-The template uses `latest` by default; pin a version tag such as `:1.1.1` if you
+on successful `master` builds, along with the version tag (currently `1.1.2`).
+The template uses `latest` by default; pin a version tag such as `:1.1.2` if you
 prefer a fixed release.
 
 If you publish under a different namespace, change `<Repository>` in the XML.
