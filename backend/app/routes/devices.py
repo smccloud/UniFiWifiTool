@@ -5,7 +5,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app import audit
-from app.auth import csrf_guard, require_user
+from app.auth import csrf_guard, get_current_user, require_admin
 from app.config import get_settings
 from app.db import get_db
 from app.deps import get_request_id, get_service
@@ -15,7 +15,7 @@ from app.discipline import (
     end_discipline,
     start_discipline,
 )
-from app.models import WIRELESS_ONLY, Device, DisciplineAction
+from app.models import WIRELESS_ONLY, Device, DisciplineAction, User
 from app.reconcile import apply_device_now, refresh_device_state
 from app.schedule import ScheduleError, clear_schedule, save_schedule, validate_schedule
 from app.schemas import (
@@ -36,7 +36,7 @@ from app.unifi.types import validate_device_mac
 router = APIRouter(
     prefix="/api/devices",
     tags=["devices"],
-    dependencies=[Depends(require_user), Depends(csrf_guard)],
+    dependencies=[Depends(get_current_user), Depends(csrf_guard)],
 )
 
 
@@ -118,7 +118,7 @@ def create_device(
     request: Request,
     db: Session = Depends(get_db),
     service: UniFiService = Depends(get_service),
-    user: str = Depends(require_user),
+    user: User = Depends(require_admin),
 ):
     try:
         mac = validate_device_mac(payload.mac)
@@ -141,7 +141,8 @@ def create_device(
     db.flush()
     audit.record(
         db,
-        actor=user,
+        actor=user.audit_name,
+        user_id=user.id,
         action="device_added",
         target_mac=mac,
         detail={"accessMode": payload.access_mode},
@@ -156,7 +157,8 @@ def create_device(
             service,
             get_settings(),
             device,
-            actor=user,
+            actor=user.audit_name,
+            user_id=user.id,
             reason="device_created",
         )
         db.commit()
@@ -172,7 +174,7 @@ def update_device(
     request: Request,
     db: Session = Depends(get_db),
     service: UniFiService = Depends(get_service),
-    user: str = Depends(require_user),
+    user: User = Depends(require_admin),
 ):
     device = _get_device(db, device_id)
     if payload.label is not None:
@@ -189,7 +191,8 @@ def update_device(
             device.next_change_at = None
         audit.record(
             db,
-            actor=user,
+            actor=user.audit_name,
+            user_id=user.id,
             action="access_changed",
             target_mac=device.mac,
             detail={"from": previous, "to": payload.access_mode},
@@ -205,7 +208,8 @@ def update_device(
                 service,
                 get_settings(),
                 device,
-                actor=user,
+                actor=user.audit_name,
+                user_id=user.id,
                 reason="manual",
             )
         else:
@@ -221,7 +225,7 @@ def delete_device(
     device_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: str = Depends(require_user),
+    user: User = Depends(require_admin),
 ):
     device = _get_device(db, device_id)
     if active_discipline(db, device.id) is not None:
@@ -234,7 +238,8 @@ def delete_device(
     db.delete(device)
     audit.record(
         db,
-        actor=user,
+        actor=user.audit_name,
+        user_id=user.id,
         action="device_removed",
         target_mac=mac,
         detail={"label": label, "note": "UniFi block state was not changed"},
@@ -251,7 +256,7 @@ def set_schedule(
     request: Request,
     db: Session = Depends(get_db),
     service: UniFiService = Depends(get_service),
-    user: str = Depends(require_user),
+    user: User = Depends(require_admin),
 ):
     device = _get_device(db, device_id)
     try:
@@ -263,7 +268,8 @@ def set_schedule(
     device.access_mode = "scheduled"
     audit.record(
         db,
-        actor=user,
+        actor=user.audit_name,
+        user_id=user.id,
         action="schedule_set",
         target_mac=device.mac,
         detail=normalized,
@@ -278,7 +284,8 @@ def set_schedule(
             service,
             get_settings(),
             device,
-            actor=user,
+            actor=user.audit_name,
+            user_id=user.id,
             reason="schedule_updated",
         )
     else:
@@ -294,7 +301,7 @@ def remove_schedule(
     device_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: str = Depends(require_user),
+    user: User = Depends(require_admin),
 ):
     device = _get_device(db, device_id)
     clear_schedule(device)
@@ -302,7 +309,8 @@ def remove_schedule(
     device.effective_access = "ignored"
     audit.record(
         db,
-        actor=user,
+        actor=user.audit_name,
+        user_id=user.id,
         action="schedule_cleared",
         target_mac=device.mac,
         detail={"note": "Device is now unmanaged; UniFi block state was not changed"},
@@ -319,7 +327,7 @@ def apply_now(
     request: Request,
     db: Session = Depends(get_db),
     service: UniFiService = Depends(get_service),
-    user: str = Depends(require_user),
+    user: User = Depends(require_admin),
 ):
     device = _get_device(db, device_id)
     try:
@@ -328,7 +336,8 @@ def apply_now(
             service,
             get_settings(),
             device,
-            actor=user,
+            actor=user.audit_name,
+            user_id=user.id,
             reason="manual_apply",
         )
     except UniFiError as exc:
@@ -352,7 +361,7 @@ def start_device_discipline(
     request: Request,
     db: Session = Depends(get_db),
     service: UniFiService = Depends(get_service),
-    user: str = Depends(require_user),
+    user: User = Depends(require_admin),
 ):
     device = _get_device(db, device_id)
     try:
@@ -364,7 +373,8 @@ def start_device_discipline(
             download_kbps=payload.download_kbps,
             upload_kbps=payload.upload_kbps,
             expires_at=expires_at,
-            actor=user,
+            actor=user.audit_name,
+            user_id=user.id,
             request_id=get_request_id(request),
         )
     except ValueError as exc:
@@ -382,7 +392,7 @@ def end_device_discipline(
     request: Request,
     db: Session = Depends(get_db),
     service: UniFiService = Depends(get_service),
-    user: str = Depends(require_user),
+    user: User = Depends(require_admin),
 ):
     device = _get_device(db, device_id)
     action = active_discipline(db, device.id)
@@ -393,7 +403,8 @@ def end_device_discipline(
         db,
         service,
         action,
-        actor=user,
+        actor=user.audit_name,
+        user_id=user.id,
         reason="manual",
         request_id=get_request_id(request),
     )

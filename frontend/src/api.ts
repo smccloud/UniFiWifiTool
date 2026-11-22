@@ -7,9 +7,13 @@ import type {
   EditableAccessMode,
   LicenseInfo,
   Me,
+  Role,
   Schedule,
+  SetupStatus,
   Status,
   SyncSummary,
+  User,
+  UserList,
   WifiNetwork,
 } from "./types";
 
@@ -99,15 +103,83 @@ function query(params: Record<string, string | number | boolean | undefined>): s
 }
 
 export const api = {
+  setupStatus: () => request<SetupStatus>("/api/setup/status"),
+
+  completeSetup: (payload: { username: string; display_name?: string; password: string }) =>
+    request<{ username: string; csrf_token: string; role: Role; display_name: string }>(
+      "/api/setup",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    ),
+
   login: (username: string, password: string) =>
-    request<{ username: string; csrf_token: string }>("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ username, password }),
-    }),
+    request<{ username: string; csrf_token: string; role: Role; display_name: string }>(
+      "/api/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      },
+    ),
 
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
 
   me: () => request<Me>("/api/auth/me"),
+
+  users: () => request<UserList>("/api/users"),
+
+  createUser: (payload: {
+    username: string;
+    display_name?: string;
+    role: Role;
+    password: string;
+  }) =>
+    request<User>("/api/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateUser: (
+    id: number,
+    payload: {
+      display_name?: string;
+      role?: Role;
+      disabled?: boolean;
+      revoke_sessions?: boolean;
+    },
+  ) =>
+    request<User>(`/api/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteUser: (id: number) =>
+    request<{ ok: boolean; username: string }>(`/api/users/${id}`, { method: "DELETE" }),
+
+  resetUserPassword: async (id: number, newPassword: string) => {
+    const result = await request<{ ok: boolean; csrf_token?: string }>(
+      `/api/users/${id}/password`,
+      {
+        method: "POST",
+        body: JSON.stringify({ new_password: newPassword }),
+      },
+    );
+    if (result.csrf_token) setCsrfToken(result.csrf_token);
+    return result;
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    const result = await request<{ ok: boolean; csrf_token: string }>("/api/account/password", {
+      method: "POST",
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    });
+    setCsrfToken(result.csrf_token);
+    return result;
+  },
 
   status: () => request<Status>("/api/system/status"),
 

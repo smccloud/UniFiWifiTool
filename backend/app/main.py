@@ -13,13 +13,14 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app import __version__
+from app.auth import bootstrap_from_environment, user_count
 from app.config import Settings, get_settings
 from app.db import dispose_engine, get_session_factory, init_db
 from app.discipline import expire_due_actions
 from app.heartbeat import telemetry_loop
 from app.reconcile import SyncBusy, run_sync
 from app.retention import purge_if_due
-from app.routes import audit, auth, clients, devices, system
+from app.routes import audit, auth, clients, devices, setup, system, users
 from app.timeutil import utcnow
 from app.unifi.errors import UniFiError
 from app.unifi.service import UniFiService
@@ -88,8 +89,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         init_db()
+        session = get_session_factory()()
+        try:
+            bootstrap_from_environment(session)
+            remaining_users = user_count(session)
+        finally:
+            session.close()
         if settings.auth_disabled:
             logger.warning("AUTH_DISABLED is enabled; anyone who can reach this port can manage WiFi access")
+        elif remaining_users == 0:
+            logger.warning(
+                "No admin user exists yet; complete the first-run setup at /setup"
+            )
+        elif settings.app_password or settings.app_password_hash:
+            logger.warning(
+                "APP_PASSWORD/APP_PASSWORD_HASH is ignored because users exist; "
+                "manage users in the Web UI"
+            )
         if not settings.unifi_host:
             logger.warning("UNIFI_HOST is not configured")
         if settings.unifi_tls_insecure:
@@ -185,6 +201,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return PlainTextResponse(_license_text())
 
     app.include_router(auth.router)
+    app.include_router(setup.router)
+    app.include_router(users.router)
     app.include_router(devices.router)
     app.include_router(clients.router)
     app.include_router(audit.router)

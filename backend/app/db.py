@@ -117,6 +117,14 @@ def _migrate_sqlite(engine: Engine) -> None:
             connection.exec_driver_sql(
                 "ALTER TABLE devices ADD COLUMN connection_type VARCHAR(16)"
             )
+        audit_columns = {
+            row[1]
+            for row in connection.exec_driver_sql("PRAGMA table_info(audit_log)")
+        }
+        if audit_columns and "user_id" not in audit_columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE audit_log ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL"
+            )
 
 
 def dispose_engine() -> None:

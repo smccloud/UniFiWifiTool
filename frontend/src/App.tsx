@@ -19,6 +19,7 @@ const PAGE_META: Record<Page, { title: string; subtitle: string }> = {
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [checking, setChecking] = useState(true);
+  const [setupRequired, setSetupRequired] = useState(false);
   const [startupError, setStartupError] = useState("");
   const [status, setStatus] = useState<Status | null>(null);
   const [page, setPage] = useState<Page>("overview");
@@ -45,7 +46,28 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void loadMe();
+    let cancelled = false;
+    api
+      .setupStatus()
+      .then((state) => {
+        if (cancelled) return;
+        if (state.setup_required) {
+          setCsrfToken(state.csrf_token);
+          setSetupRequired(true);
+          setChecking(false);
+          return;
+        }
+        void loadMe();
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setStartupError(errorMessage(err));
+          setChecking(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [loadMe]);
 
   useEffect(() => {
@@ -117,6 +139,22 @@ export default function App() {
   }
 
   if (!me) {
+    if (setupRequired) {
+      return (
+        <>
+          <div className="login-theme">
+            <ThemeSwitch preference={preference} onChange={setPreference} />
+          </div>
+          <SetupPage
+            startupError={startupError}
+            onCompleted={async () => {
+              setSetupRequired(false);
+              await loadMe();
+            }}
+          />
+        </>
+      );
+    }
     return (
       <>
         <div className="login-theme">
@@ -127,6 +165,7 @@ export default function App() {
     );
   }
 
+  const canWrite = me.role === "admin";
   const meta = PAGE_META[page];
 
   return (
@@ -152,8 +191,10 @@ export default function App() {
 
         <div className="sidebar-footer">
           <div className="muted small">Signed in as</div>
-          <strong>{me.username}</strong>
-          <div className="muted small">v{me.version}</div>
+          <strong>{me.display_name || me.username}</strong>
+          <div className="muted small">
+            {me.role === "admin" ? "Administrator" : "Viewer"} · v{me.version}
+          </div>
           <button className="license-link" onClick={() => setPage("settings")}>
             MIT License
           </button>
@@ -172,9 +213,11 @@ export default function App() {
               <span className="pill-dot" />
               {status?.controller.error ? "Controller issue" : status?.controller.site?.name ?? "Controller"}
             </span>
-            <button className="button button-ghost" onClick={handleSync} disabled={syncing}>
-              {syncing ? "Syncing…" : "Sync now"}
-            </button>
+            {canWrite ? (
+              <button className="button button-ghost" onClick={handleSync} disabled={syncing}>
+                {syncing ? "Syncing…" : "Sync now"}
+              </button>
+            ) : null}
             <button className="button button-ghost" onClick={handleLogout}>
               Sign out
             </button>
@@ -197,18 +240,31 @@ export default function App() {
             onNavigate={setPage}
             onSync={handleSync}
             syncing={syncing}
+            canWrite={canWrite}
           />
         ) : null}
         {page === "devices" ? (
-          <DevicesPage status={status} refreshKey={refreshKey} onChanged={onChanged} />
+          <DevicesPage
+            status={status}
+            refreshKey={refreshKey}
+            onChanged={onChanged}
+            canWrite={canWrite}
+          />
         ) : null}
         {page === "clients" ? (
-          <ClientsPage status={status} refreshKey={refreshKey} onChanged={onChanged} />
+          <ClientsPage
+            status={status}
+            refreshKey={refreshKey}
+            onChanged={onChanged}
+            canWrite={canWrite}
+          />
         ) : null}
         {page === "audit" ? <AuditPage refreshKey={refreshKey} /> : null}
         {page === "settings" ? (
           <SettingsPage
             status={status}
+            me={me}
+            canWrite={canWrite}
             onSync={handleSync}
             syncing={syncing}
             onRefreshStatus={() => void loadStatus()}
@@ -252,7 +308,7 @@ function LoginPage({
   startupError: string;
   onLoggedIn: () => Promise<void>;
 }) {
-  const [username, setUsername] = useState("admin");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -317,8 +373,106 @@ function LoginPage({
   );
 }
 
-function WifiIcon() {
+function SetupPage({
+  startupError,
+  onCompleted,
+}: {
+  startupError: string;
+  onCompleted: () => Promise<void>;
+}) {
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    if (password !== confirm) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api.completeSetup({
+        username: username.trim(),
+        display_name: displayName.trim(),
+        password,
+      });
+      setCsrfToken(result.csrf_token);
+      await onCompleted();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
+    <div className="login-screen">
+      <form className="login-card" onSubmit={submit}>
+        <div className="login-brand">
+          <div className="brand-mark large">
+            <WifiIcon />
+          </div>
+          <h1>Create the first admin</h1>
+          <p className="muted small">
+            This setup screen appears only once, while no users exist.
+          </p>
+        </div>
+        {startupError ? <ErrorBanner message={startupError} /> : null}
+        {error ? <ErrorBanner message={error} onDismiss={() => setError("")} /> : null}
+        <label>
+          <span>Username</span>
+          <input
+            autoFocus
+            autoComplete="username"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder="admin"
+          />
+        </label>
+        <label>
+          <span>Display name (optional)</span>
+          <input
+            autoComplete="name"
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+          />
+        </label>
+        <label>
+          <span>Password</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          <span className="muted small">At least 12 characters; a passphrase works well.</span>
+        </label>
+        <label>
+          <span>Confirm password</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(event) => setConfirm(event.target.value)}
+          />
+        </label>
+        <button className="button button-primary button-wide" type="submit" disabled={busy}>
+          {busy ? "Creating admin…" : "Create admin"}
+        </button>
+        <p className="login-license muted small">
+          Credentials are stored in the local SQLite database as salted scrypt hashes.
+        </p>
+      </form>
+    </div>
+  );
+}
+
+function WifiIcon() {  return (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M3.5 8.5a13 13 0 0 1 17 0" strokeLinecap="round" />
       <path d="M6.5 12a8.5 8.5 0 0 1 11 0" strokeLinecap="round" />

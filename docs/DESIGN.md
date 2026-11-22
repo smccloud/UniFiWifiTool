@@ -36,7 +36,7 @@ This application is a single-container web app for those tasks.
 - Replacing UniFi's firewall, RADIUS, or guest portal configuration.
 - Managing wired switch ports.
 - Multi-controller / multi-tenant orchestration.
-- A full identity provider. The app has a single admin account; OIDC is planned.
+- A full identity provider. Local admin/viewer accounts are supported; OIDC is planned.
 - Guaranteeing pre-association enforcement for unknown devices (see §4).
 
 ## 3. UniFi API constraints
@@ -161,7 +161,7 @@ so both mechanisms can coexist.
 | --- | --- |
 | `app/config.py` | Environment configuration, validation, TLS settings. |
 | `app/db.py` | SQLAlchemy engine/session, UTC datetime handling, SQLite pragmas. |
-| `app/models.py` | `Device`, `AuditLog`, `Setting`. |
+| `app/models.py` | `Device`, `User`, `AuditLog`, `Setting`. |
 | `app/schedule.py` | Pure schedule validation, evaluation, next-transition math. |
 | `app/unifi/integration.py` | Official API client with pagination, 429/5xx retries. |
 | `app/unifi/classic.py` | Login, CSRF rotation, `/stat/sta`, `/cmd/stamgr`. |
@@ -170,7 +170,7 @@ so both mechanisms can coexist.
 | `app/discipline.py` | Temporary speed-limit lifecycle and expiry restoration. |
 | `app/retention.py` | Audit retention settings, purge, and daily scheduling. |
 | `app/heartbeat.py` | Opt-in anonymous install heartbeat task. |
-| `app/routes/*` | JSON API for auth, devices, clients, audit, and system settings. |
+| `app/routes/*` | JSON API for auth, setup, users, devices, clients, audit, and system settings. |
 | `app/main.py` | Lifespan, scheduler task, security headers, SPA and license serving. |
 
 ### Data model
@@ -187,11 +187,21 @@ so both mechanisms can coexist.
   last seen, UniFi client ID, connection type).
 - provenance (`source`, `created_by`, timestamps).
 
+`users`
+
+Local Web UI accounts: unique case-insensitive username, optional display
+name, scrypt `password_hash`, role (`admin` or `viewer`), disabled flag,
+session version (incremented to revoke that user's sessions), and
+created/updated/last-login timestamps. Passwords are never stored in plaintext
+or returned by the API. `audit_log.user_id` references the acting user and is
+set to NULL if the user is deleted, leaving the `actor` display snapshot.
+
 `audit_log`
 
-Append-only except for configured retention: timestamp, actor, action, target
-MAC, result, JSON detail, request ID. Secrets are never recorded. Purging and
-retention changes are themselves audited.
+Append-only except for configured retention: timestamp, actor, user ID (when the
+action came from a Web UI account), action, target MAC, result, JSON detail,
+request ID. Secrets are never recorded. Purging and retention changes are
+themselves audited.
 
 `discipline_actions`
 
@@ -273,9 +283,16 @@ otherwise the UI disables the feature.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/api/auth/login` | Session login; returns CSRF token. |
+| GET | `/api/setup/status` | Whether first-run setup is required; returns a CSRF token. |
+| POST | `/api/setup` | Create the initial administrator (only while no users exist). |
+| POST | `/api/auth/login` | Session login; returns CSRF token and role. |
 | POST | `/api/auth/logout` | Clear session. |
-| GET | `/api/auth/me` | Current user + CSRF token. |
+| GET | `/api/auth/me` | Current user, role, and CSRF token. |
+| GET | `/api/users` | List users (admin only). |
+| POST | `/api/users` | Create a user (admin only). |
+| PATCH/DELETE | `/api/users/{id}` | Change role/status or delete a user (admin only). |
+| POST | `/api/users/{id}/password` | Reset another user's password (admin only). |
+| POST | `/api/account/password` | Change your own password. |
 | GET | `/api/system/status` | Capabilities, counts, enforcement settings, last sync. |
 | POST | `/api/system/sync` | Run discovery + reconciliation. |
 | POST | `/api/system/test` | Force capability re-detection. |
@@ -297,7 +314,8 @@ otherwise the UI disables the feature.
 | GET | `/api/audit` | Filterable audit log. |
 
 All mutating endpoints require the session cookie **and** an `X-CSRF-Token`
-header. The API is same-origin only.
+header. The API is same-origin only. Roles are enforced server-side: Viewer
+accounts receive `403` from every mutating endpoint, including user management.
 
 ## 8. UI
 
@@ -341,8 +359,16 @@ The wording is deliberately neutral and parental-control oriented.
 
 ## 9. Security
 
-- Single admin account; password stored as scrypt hash (or supplied as a hash).
-- Signed, HttpOnly session cookie; `Secure` flag via `COOKIE_SECURE`.
+- Multiple local accounts stored in SQLite: username, scrypt `password_hash`,
+  role (`admin`/`viewer`), disabled flag, and session version. Plaintext
+  passwords are never stored or logged, and hashes are never returned by the API.
+- First-run setup creates the initial administrator. It is available only while
+  the `users` table is empty, is CSRF-protected, and is guarded against
+  concurrent submissions. An env-configured admin (`APP_PASSWORD` or
+  `APP_PASSWORD_HASH`) is imported on first start for existing installs.
+- Signed, HttpOnly session cookie; `Secure` flag via `COOKIE_SECURE`. The cookie
+  carries the user id and session version, so disabling an account, changing a
+  role, or changing a password invalidates that user's sessions immediately.
 - CSRF double-submit token required on every mutation.
 - Login rate limiting with temporary lockout.
 - Secrets only in environment variables; never returned by the API or written
@@ -402,7 +428,7 @@ anonymous install IDs.
 - The application version is read from the repo-root `VERSION` file (mirrored
   in `frontend/package.json` and `IMAGE_VERSION`) and exposed by the API/UI.
 - Jenkins publishes successful `master` builds to Docker Hub as
-  `smccloud/unifi-wifi-tool:<version>` (currently `0.9.0`) and `latest`, using
+  `smccloud/unifi-wifi-tool:<version>` (currently `1.0.0`) and `latest`, using
   the Jenkins credentials named `Docker`.
 - On unRAID, running as `--user 99:100` matches the usual appdata ownership;
   the image itself also has a non-root `app` user.

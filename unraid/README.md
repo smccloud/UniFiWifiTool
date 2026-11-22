@@ -6,8 +6,8 @@ This image is designed to run directly through unRAID's **Docker** tab
 ## 1. Use the published image
 
 The Jenkins pipeline publishes `smccloud/unifi-wifi-tool:latest` to Docker Hub
-on successful `master` builds, along with the version tag (currently `0.9.0`).
-The template uses `latest` by default; pin a version tag such as `:0.9.0` if you
+on successful `master` builds, along with the version tag (currently `1.0.0`).
+The template uses `latest` by default; pin a version tag such as `:1.0.0` if you
 prefer a fixed release.
 
 If you publish under a different namespace, change `<Repository>` in the XML.
@@ -39,7 +39,10 @@ PNG at 512×512 (for example with a headless browser or an SVG rasterizer).
 4. Set:
    - **AppData**: `/mnt/user/appdata/unifi-wifi-tool`
    - **Web UI** port: usually `8080` → container port `8000`
-   - **APP_PASSWORD** and **SECRET_KEY**
+   - **SECRET_KEY**
+   - **APP_PASSWORD** only if you want to seed the first admin from the
+     template; otherwise leave it empty and create the admin at `/setup` on
+     first launch
    - **UNIFI_HOST**, **UNIFI_API_KEY**
    - **UNIFI_USERNAME** and **UNIFI_PASSWORD** for block/unblock and
      temporary speed limits
@@ -102,8 +105,6 @@ docker run -d \
   --user 99:100 \
   -p 8080:8000 \
   -v /mnt/user/appdata/unifi-wifi-tool:/data \
-  -e APP_USERNAME=admin \
-  -e APP_PASSWORD='change-me' \
   -e SECRET_KEY="$(openssl rand -base64 48)" \
   -e UNIFI_HOST='https://192.168.1.1' \
   -e UNIFI_API_KEY='...' \
@@ -111,6 +112,10 @@ docker run -d \
   -e UNIFI_PASSWORD='...' \
   smccloud/unifi-wifi-tool:latest
 ```
+
+On first launch with no users, open the Web UI to create the first
+administrator (or set `APP_PASSWORD` to seed it automatically). Once users
+exist, manage accounts in **Settings → Users**.
 
 On a normal Linux host, omit `--user 99:100` and point the volume at any
 directory writable by the image's `app` user.

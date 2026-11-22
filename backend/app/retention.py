@@ -59,6 +59,7 @@ def purge_old_audit(
     retention_days: int | None = None,
     *,
     actor: str = "scheduler",
+    user_id: int | None = None,
 ) -> PurgeResult:
     """Delete audit rows older than the retention period.
 
@@ -96,6 +97,7 @@ def purge_old_audit(
         audit.record(
             db,
             actor=actor,
+            user_id=user_id,
             action="audit_purged",
             result="success",
             detail=detail,

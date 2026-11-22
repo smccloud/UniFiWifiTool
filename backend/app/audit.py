@@ -13,6 +13,7 @@ def record(
     *,
     actor: str,
     action: str,
+    user_id: int | None = None,
     target_mac: str | None = None,
     result: str = "success",
     detail: dict[str, Any] | None = None,
@@ -20,6 +21,7 @@ def record(
 ) -> AuditLog:
     entry = AuditLog(
         actor=actor,
+        user_id=user_id or None,
         action=action,
         target_mac=target_mac,
         result=result,

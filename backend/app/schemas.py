@@ -12,6 +12,7 @@ from app.schedule import Schedule, load_schedule, schedule_to_dict
 AccessMode = Literal["allowed", "blocked", "scheduled", "ignored"]
 EditableAccessMode = Literal["allowed", "blocked", "ignored"]
 ScheduleKind = Literal["allow_during", "block_during"]
+Role = Literal["admin", "viewer"]
 
 
 class ScheduleWindowIn(BaseModel):
@@ -153,6 +154,7 @@ class AuditOut(BaseModel):
     id: int
     created_at: datetime
     actor: str
+    user_id: int | None = None
     action: str
     target_mac: str | None = None
     result: str
@@ -244,14 +246,76 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     username: str
     csrf_token: str
+    role: Role = "admin"
+    display_name: str = ""
 
 
 class MeResponse(BaseModel):
     username: str
+    user_id: int = 0
+    display_name: str = ""
+    role: Role = "admin"
     csrf_token: str
     auth_disabled: bool
     app_name: str
     version: str
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    display_name: str
+    role: Role
+    disabled: bool
+    created_at: datetime
+    updated_at: datetime
+    last_login_at: datetime | None = None
+
+
+class UserList(BaseModel):
+    items: list[UserOut]
+    total: int
+
+
+class UserCreate(BaseModel):
+    username: str
+    display_name: str = ""
+    role: Role = "viewer"
+    password: str
+
+
+class UserUpdate(BaseModel):
+    display_name: str | None = None
+    role: Role | None = None
+    disabled: bool | None = None
+    revoke_sessions: bool = False
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class PasswordReset(BaseModel):
+    new_password: str
+
+
+class PasswordChangeResponse(BaseModel):
+    ok: bool
+    csrf_token: str
+
+
+class SetupStatus(BaseModel):
+    setup_required: bool
+    csrf_token: str = ""
+
+
+class SetupRequest(BaseModel):
+    username: str
+    display_name: str = ""
+    password: str
 
 
 def schedule_out(schedule: Schedule) -> ScheduleOut:
@@ -320,6 +384,7 @@ def audit_out(entry: AuditLog) -> AuditOut:
         id=entry.id,
         created_at=entry.created_at,
         actor=entry.actor,
+        user_id=entry.user_id,
         action=entry.action,
         target_mac=entry.target_mac,
         result=entry.result,

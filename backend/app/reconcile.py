@@ -53,13 +53,14 @@ def run_sync(
     settings: Settings,
     *,
     actor: str = "scheduler",
+    user_id: int | None = None,
     dry_run: bool | None = None,
 ) -> SyncSummary:
     """Run a reconciliation, refusing concurrent runs."""
     if not _SYNC_LOCK.acquire(blocking=False):
         raise SyncBusy("A sync is already running")
     try:
-        return sync(db, service, settings, actor=actor, dry_run=dry_run)
+        return sync(db, service, settings, actor=actor, user_id=user_id, dry_run=dry_run)
     finally:
         _SYNC_LOCK.release()
 
@@ -70,6 +71,7 @@ def sync(
     settings: Settings,
     *,
     actor: str = "scheduler",
+    user_id: int | None = None,
     dry_run: bool | None = None,
 ) -> SyncSummary:
     started = utcnow()
@@ -128,6 +130,7 @@ def sync(
             audit.record(
                 db,
                 actor=actor,
+                user_id=user_id,
                 action="dry_run",
                 target_mac=device.mac,
                 result="skipped",
@@ -145,6 +148,7 @@ def sync(
             audit.record(
                 db,
                 actor=actor,
+                user_id=user_id,
                 action="block" if desired_blocked else "unblock",
                 target_mac=device.mac,
                 result="success",
@@ -156,6 +160,7 @@ def sync(
             audit.record(
                 db,
                 actor=actor,
+                user_id=user_id,
                 action="block" if desired_blocked else "unblock",
                 target_mac=device.mac,
                 result="failure",
@@ -245,6 +250,7 @@ def apply_device_now(
     device: Device,
     *,
     actor: str,
+    user_id: int | None = None,
     reason: str,
     dry_run: bool | None = None,
 ) -> tuple[bool, str | None]:
@@ -268,6 +274,7 @@ def apply_device_now(
         audit.record(
             db,
             actor=actor,
+            user_id=user_id,
             action="dry_run",
             target_mac=device.mac,
             result="skipped",
@@ -282,6 +289,7 @@ def apply_device_now(
         audit.record(
             db,
             actor=actor,
+            user_id=user_id,
             action="block" if desired_blocked else "unblock",
             target_mac=device.mac,
             result="failure",
@@ -295,6 +303,7 @@ def apply_device_now(
     audit.record(
         db,
         actor=actor,
+        user_id=user_id,
         action="block" if desired_blocked else "unblock",
         target_mac=device.mac,
         result="success",

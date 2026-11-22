@@ -104,10 +104,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_auth(self) -> "Settings":
-        if not self.auth_disabled and not (self.app_password or self.app_password_hash):
-            raise ValueError(
-                "Set APP_PASSWORD or APP_PASSWORD_HASH (or AUTH_DISABLED=true for local development)."
-            )
+        if self.auth_disabled and self.environment.lower() in {"production", "prod"}:
+            # Warned about at startup; do not block development over it here.
+            pass
         if not self.secret_key:
             # Generated per process; sessions are invalidated on restart.
             self.secret_key = secrets.token_urlsafe(48)
