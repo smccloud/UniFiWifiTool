@@ -6,11 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app import __version__, audit
-from app.auth import csrf_guard, require_user
+from app.auth import csrf_guard, get_current_user, require_admin
 from app.config import get_settings
 from app.db import get_db
 from app.deps import get_request_id, get_service
-from app.models import WIRELESS_ONLY, Device
+from app.models import WIRELESS_ONLY, Device, User
 from app.reconcile import SyncBusy, run_sync
 from app.retention import get_retention_days, purge_old_audit, set_retention_days
 from app.runtime import get_setting
@@ -30,7 +30,7 @@ from app.unifi.service import UniFiService
 router = APIRouter(
     prefix="/api/system",
     tags=["system"],
-    dependencies=[Depends(require_user), Depends(csrf_guard)],
+    dependencies=[Depends(get_current_user), Depends(csrf_guard)],
 )
 
 
@@ -113,10 +113,12 @@ def sync_now(
     request: Request,
     db: Session = Depends(get_db),
     service: UniFiService = Depends(get_service),
-    user: str = Depends(require_user),
+    user: User = Depends(require_admin),
 ):
     try:
-        summary = run_sync(db, service, get_settings(), actor=user)
+        summary = run_sync(
+            db, service, get_settings(), actor=user.audit_name, user_id=user.id
+        )
     except SyncBusy as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except UniFiError as exc:
@@ -135,7 +137,7 @@ def update_audit_retention(
     payload: AuditRetentionUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    user: str = Depends(require_user),
+    user: User = Depends(require_admin),
 ):
     try:
         days = set_retention_days(db, payload.days)
@@ -143,20 +145,21 @@ def update_audit_retention(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     audit.record(
         db,
-        actor=user,
+        actor=user.audit_name,
+        user_id=user.id,
         action="audit_retention_changed",
         detail={"retentionDays": days},
         request_id=get_request_id(request),
     )
     db.commit()
-    result = purge_old_audit(db, days, actor=user)
+    result = purge_old_audit(db, days, actor=user.audit_name, user_id=user.id)
     return AuditPurgeOut(**result.to_dict())
 
 
 @router.post("/audit-purge", response_model=AuditPurgeOut)
 def purge_audit(
     db: Session = Depends(get_db),
-    user: str = Depends(require_user),
+    user: User = Depends(require_admin),
 ):
-    result = purge_old_audit(db, actor=user)
+    result = purge_old_audit(db, actor=user.audit_name, user_id=user.id)
     return AuditPurgeOut(**result.to_dict())

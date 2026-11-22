@@ -27,8 +27,10 @@ import type {
   Device,
   EditableAccessMode,
   LicenseInfo,
+  Role,
   Schedule,
   Status,
+  User,
   WifiNetwork,
 } from "./types";
 
@@ -68,12 +70,14 @@ export function OverviewPage({
   onNavigate,
   onSync,
   syncing,
+  canWrite,
 }: {
   status: Status | null;
   refreshKey: number;
   onNavigate: (page: Page) => void;
   onSync: () => void;
   syncing: boolean;
+  canWrite: boolean;
 }) {
   const [recent, setRecent] = useState<AuditEntry[]>([]);
   const [error, setError] = useState("");
@@ -132,9 +136,11 @@ export function OverviewPage({
               <h2>Controller</h2>
               <p className="muted small">UniFi OS · {controller.site?.name ?? "site not resolved"}</p>
             </div>
-            <button className="button button-ghost" onClick={onSync} disabled={syncing}>
-              {syncing ? "Syncing…" : "Sync now"}
-            </button>
+            {canWrite ? (
+              <button className="button button-ghost" onClick={onSync} disabled={syncing}>
+                {syncing ? "Syncing…" : "Sync now"}
+              </button>
+            ) : null}
           </div>
           <div className="key-values">
             <div>
@@ -274,10 +280,12 @@ export function DevicesPage({
   status,
   refreshKey,
   onChanged,
+  canWrite,
 }: {
   status: Status | null;
   refreshKey: number;
   onChanged: () => void;
+  canWrite: boolean;
 }) {
   const [devices, setDevices] = useState<Device[]>([]);
   const [total, setTotal] = useState(0);
@@ -379,9 +387,11 @@ export function DevicesPage({
               <option value="scheduled">Scheduled</option>
               <option value="ignored">Unmanaged</option>
             </select>
-            <button className="button button-primary" onClick={() => setAddOpen(true)}>
-              + Add device
-            </button>
+            {canWrite ? (
+              <button className="button button-primary" onClick={() => setAddOpen(true)}>
+                + Add device
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -435,22 +445,26 @@ export function DevicesPage({
                     </td>
                     <td className="right">
                       <div className="row-actions">
-                        <button
-                          className="button button-small"
-                          disabled={busyId === device.id}
-                          onClick={() => void setMode(device, "allowed")}
-                        >
-                          Allow
-                        </button>
-                        <button
-                          className="button button-small button-danger-ghost"
-                          disabled={busyId === device.id}
-                          onClick={() => void setMode(device, "blocked")}
-                        >
-                          Block
-                        </button>
+                        {canWrite ? (
+                          <>
+                            <button
+                              className="button button-small"
+                              disabled={busyId === device.id}
+                              onClick={() => void setMode(device, "allowed")}
+                            >
+                              Allow
+                            </button>
+                            <button
+                              className="button button-small button-danger-ghost"
+                              disabled={busyId === device.id}
+                              onClick={() => void setMode(device, "blocked")}
+                            >
+                              Block
+                            </button>
+                          </>
+                        ) : null}
                         <button className="button button-small button-ghost" onClick={() => setSelected(device)}>
-                          Edit
+                          {canWrite ? "Edit" : "Details"}
                         </button>
                       </div>
                     </td>
@@ -479,6 +493,7 @@ export function DevicesPage({
           device={selected}
           status={status}
           busy={busyId === selected.id}
+          canWrite={canWrite}
           onClose={() => setSelected(null)}
           onUpdated={(updated) => {
             setSelected(updated);
@@ -600,6 +615,7 @@ function DeviceDrawer({
   device,
   status,
   busy,
+  canWrite,
   onClose,
   onUpdated,
   onDeleted,
@@ -607,6 +623,7 @@ function DeviceDrawer({
   device: Device;
   status: Status | null;
   busy: boolean;
+  canWrite: boolean;
   onClose: () => void;
   onUpdated: (device: Device) => void;
   onDeleted: () => void;
@@ -786,7 +803,7 @@ function DeviceDrawer({
     }
   }
 
-  const disabled = busy || saving || disciplineBusy;
+  const disabled = busy || saving || disciplineBusy || !canWrite;
   const discipline = device.discipline;
   const disciplineOk = status?.controller.discipline_ok ?? false;
 
@@ -1083,10 +1100,12 @@ export function ClientsPage({
   status,
   refreshKey,
   onChanged,
+  canWrite,
 }: {
   status: Status | null;
   refreshKey: number;
   onChanged: () => void;
+  canWrite: boolean;
 }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [includeWired, setIncludeWired] = useState(false);
@@ -1212,27 +1231,33 @@ export function ClientsPage({
                     <td className="muted small">{client.source}</td>
                     <td className="right">
                       <div className="row-actions">
-                        <button
-                          className="button button-small"
-                          disabled={busyMac === client.mac}
-                          onClick={() => void act(client, "allowed")}
-                        >
-                          Allow
-                        </button>
-                        <button
-                          className="button button-small button-danger-ghost"
-                          disabled={busyMac === client.mac}
-                          onClick={() => void act(client, "blocked")}
-                        >
-                          Block
-                        </button>
-                        <button
-                          className="button button-small button-ghost"
-                          disabled={busyMac === client.mac}
-                          onClick={() => void act(client, "ignored")}
-                        >
-                          Unmanage
-                        </button>
+                        {canWrite ? (
+                          <>
+                            <button
+                              className="button button-small"
+                              disabled={busyMac === client.mac}
+                              onClick={() => void act(client, "allowed")}
+                            >
+                              Allow
+                            </button>
+                            <button
+                              className="button button-small button-danger-ghost"
+                              disabled={busyMac === client.mac}
+                              onClick={() => void act(client, "blocked")}
+                            >
+                              Block
+                            </button>
+                            <button
+                              className="button button-small button-ghost"
+                              disabled={busyMac === client.mac}
+                              onClick={() => void act(client, "ignored")}
+                            >
+                              Unmanage
+                            </button>
+                          </>
+                        ) : (
+                          <span className="muted small">Read-only</span>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1412,13 +1437,436 @@ export function AuditPage({ refreshKey }: { refreshKey: number }) {
 // Settings
 // ---------------------------------------------------------------------------
 
+type CurrentUser = {
+  user_id: number;
+  username: string;
+  display_name: string;
+  role: Role;
+};
+
+function roleLabel(role: Role): string {
+  return role === "admin" ? "Administrator" : "Viewer";
+}
+
+function AccountPanel({ me }: { me: CurrentUser }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    if (newPassword !== confirmPassword) {
+      setError("New passwords do not match.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setNotice("Password updated. Other sessions for this account were signed out.");
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <div>
+          <h2>Your account</h2>
+          <p className="muted small">Change the password for the account you are signed in with</p>
+        </div>
+        <span className="badge badge-scheduled">{roleLabel(me.role)}</span>
+      </div>
+      <div className="key-values compact">
+        <div>
+          <span>Username</span>
+          <strong>{me.username}</strong>
+        </div>
+        <div>
+          <span>Display name</span>
+          <strong>{me.display_name || "—"}</strong>
+        </div>
+      </div>
+      <form className="form-grid three" onSubmit={submit}>
+        <label>
+          <span>Current password</span>
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+          />
+        </label>
+        <label>
+          <span>New password</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+          />
+          <span className="muted small">At least 12 characters.</span>
+        </label>
+        <label>
+          <span>Confirm new password</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+          />
+        </label>
+        <div className="button-row">
+          <button className="button button-primary" type="submit" disabled={busy}>
+            {busy ? "Saving…" : "Change password"}
+          </button>
+        </div>
+      </form>
+      {error ? <ErrorBanner message={error} onDismiss={() => setError("")} /> : null}
+      {notice ? (
+        <div className="banner banner-success">
+          <span>{notice}</span>
+          <button className="icon-button" onClick={() => setNotice("")} aria-label="Dismiss">
+            ×
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function UsersPanel({ me }: { me: CurrentUser }) {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [role, setRole] = useState<Role>("viewer");
+  const [password, setPassword] = useState("");
+  const [resetId, setResetId] = useState<number | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.users();
+      setUsers(data.items);
+      setError("");
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function createUser(event: FormEvent) {
+    event.preventDefault();
+    setCreating(true);
+    setError("");
+    setNotice("");
+    try {
+      await api.createUser({
+        username: username.trim(),
+        display_name: displayName.trim(),
+        role,
+        password,
+      });
+      setUsername("");
+      setDisplayName("");
+      setRole("viewer");
+      setPassword("");
+      setNotice("User created.");
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function patchUser(user: User, payload: { role?: Role; disabled?: boolean; revoke_sessions?: boolean }, message: string) {
+    setBusyId(user.id);
+    setError("");
+    setNotice("");
+    try {
+      await api.updateUser(user.id, payload);
+      setNotice(message);
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function resetFor(user: User) {
+    setBusyId(user.id);
+    setError("");
+    setNotice("");
+    try {
+      await api.resetUserPassword(user.id, resetPassword);
+      setResetId(null);
+      setResetPassword("");
+      setNotice(`Password reset for ${user.username}. Their sessions were signed out.`);
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function remove(user: User) {
+    if (!window.confirm(`Delete user ${user.username}? This cannot be undone.`)) return;
+    setBusyId(user.id);
+    setError("");
+    setNotice("");
+    try {
+      await api.deleteUser(user.id);
+      setNotice(`User ${user.username} deleted.`);
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <div>
+          <h2>Users</h2>
+          <p className="muted small">
+            Administrators can change devices and settings; viewers are read-only
+          </p>
+        </div>
+        <span className="badge badge-allowed">{users.length} account{users.length === 1 ? "" : "s"}</span>
+      </div>
+
+      {error ? <ErrorBanner message={error} onDismiss={() => setError("")} /> : null}
+      {notice ? (
+        <div className="banner banner-success">
+          <span>{notice}</span>
+          <button className="icon-button" onClick={() => setNotice("")} aria-label="Dismiss">
+            ×
+          </button>
+        </div>
+      ) : null}
+
+      {loading ? (
+        <Spinner label="Loading users" />
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Last login</th>
+                <th className="right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((user) => {
+                const self = user.id === me.user_id;
+                const busy = busyId === user.id;
+                return (
+                  <tr key={user.id}>
+                    <td>
+                      <div className="device-name">{user.display_name || user.username}</div>
+                      <div className="mono muted small">{user.username}</div>
+                    </td>
+                    <td>
+                      <select
+                        value={user.role}
+                        disabled={busy || self}
+                        onChange={(event) =>
+                          void patchUser(
+                            user,
+                            { role: event.target.value as Role },
+                            `Role updated for ${user.username}. Their sessions were signed out.`,
+                          )
+                        }
+                      >
+                        <option value="admin">Administrator</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
+                    </td>
+                    <td>
+                      <span className={`badge ${user.disabled ? "badge-blocked" : "badge-allowed"}`}>
+                        {user.disabled ? "Disabled" : "Active"}
+                      </span>
+                    </td>
+                    <td title={formatDateTime(user.last_login_at)}>
+                      {user.last_login_at ? relativeTime(user.last_login_at) : "Never"}
+                    </td>
+                    <td className="right">
+                      {resetId === user.id ? (
+                        <div className="row-actions">
+                          <input
+                            type="password"
+                            autoComplete="new-password"
+                            placeholder="New password"
+                            value={resetPassword}
+                            onChange={(event) => setResetPassword(event.target.value)}
+                          />
+                          <button
+                            className="button button-small button-primary"
+                            disabled={busy || resetPassword.length < 12}
+                            onClick={() => void resetFor(user)}
+                          >
+                            Save
+                          </button>
+                          <button
+                            className="button button-small button-ghost"
+                            onClick={() => {
+                              setResetId(null);
+                              setResetPassword("");
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="row-actions">
+                          <button
+                            className="button button-small button-ghost"
+                            disabled={busy}
+                            onClick={() => {
+                              setResetId(user.id);
+                              setResetPassword("");
+                            }}
+                          >
+                            Reset password
+                          </button>
+                          {!self ? (
+                            <>
+                              <button
+                                className="button button-small button-ghost"
+                                disabled={busy}
+                                onClick={() =>
+                                  void patchUser(
+                                    user,
+                                    { disabled: !user.disabled },
+                                    user.disabled
+                                      ? `${user.username} enabled.`
+                                      : `${user.username} disabled and signed out.`,
+                                  )
+                                }
+                              >
+                                {user.disabled ? "Enable" : "Disable"}
+                              </button>
+                              <button
+                                className="button button-small button-ghost"
+                                disabled={busy}
+                                onClick={() =>
+                                  void patchUser(
+                                    user,
+                                    { revoke_sessions: true },
+                                    `Sessions revoked for ${user.username}.`,
+                                  )
+                                }
+                              >
+                                Sign out
+                              </button>
+                              <button
+                                className="button button-small button-danger-ghost"
+                                disabled={busy}
+                                onClick={() => void remove(user)}
+                              >
+                                Delete
+                              </button>
+                            </>
+                          ) : (
+                            <span className="muted small">This is you</span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <form className="form-grid four" onSubmit={createUser}>
+        <label>
+          <span>Username</span>
+          <input
+            autoComplete="off"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder="jane"
+          />
+        </label>
+        <label>
+          <span>Display name</span>
+          <input
+            autoComplete="off"
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+            placeholder="Jane Doe"
+          />
+        </label>
+        <label>
+          <span>Role</span>
+          <select value={role} onChange={(event) => setRole(event.target.value as Role)}>
+            <option value="viewer">Viewer</option>
+            <option value="admin">Administrator</option>
+          </select>
+        </label>
+        <label>
+          <span>Initial password</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          <span className="muted small">At least 12 characters.</span>
+        </label>
+        <div className="button-row">
+          <button className="button button-primary" type="submit" disabled={creating}>
+            {creating ? "Adding…" : "+ Add user"}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
 export function SettingsPage({
   status,
+  me,
+  canWrite,
   onSync,
   syncing,
   onRefreshStatus,
 }: {
   status: Status | null;
+  me: { user_id: number; username: string; display_name: string; role: Role };
+  canWrite: boolean;
   onSync: () => void;
   syncing: boolean;
   onRefreshStatus: () => void;
@@ -1555,9 +2003,11 @@ export function SettingsPage({
               <button className="button button-ghost" onClick={test} disabled={testing}>
                 {testing ? "Testing…" : "Test connection"}
               </button>
-              <button className="button button-primary" onClick={onSync} disabled={syncing}>
-                {syncing ? "Syncing…" : "Sync now"}
-              </button>
+              {canWrite ? (
+                <button className="button button-primary" onClick={onSync} disabled={syncing}>
+                  {syncing ? "Syncing…" : "Sync now"}
+                </button>
+              ) : null}
             </div>
           </div>
           <div className="key-values">
@@ -1687,14 +2137,14 @@ export function SettingsPage({
           <button
             className="button button-primary"
             onClick={saveRetention}
-            disabled={retentionBusy}
+            disabled={retentionBusy || !canWrite}
           >
             {retentionBusy ? "Saving…" : "Save retention"}
           </button>
           <button
             className="button button-ghost"
             onClick={purgeNow}
-            disabled={retentionBusy || retentionDays === 0}
+            disabled={retentionBusy || retentionDays === 0 || !canWrite}
           >
             Run cleanup now
           </button>
@@ -1728,8 +2178,7 @@ export function SettingsPage({
               Per-SSID MAC allowlists are available on Network 10.0+ through the official API.
             </p>
           </div>
-        </div>
-        {wifiError ? (
+        </div>        {wifiError ? (
           <InfoBanner>{wifiError}</InfoBanner>
         ) : wifi.length ? (
           <div className="table-wrap">
@@ -1766,6 +2215,9 @@ export function SettingsPage({
           <EmptyState title="No WiFi networks available" hint="The API key may not have access, or there are no SSIDs." />
         )}
       </section>
+
+      {canWrite ? <UsersPanel me={me} /> : null}
+      <AccountPanel me={me} />
 
       <section className="panel">
         <h2>Security notes</h2>

@@ -89,6 +89,30 @@ class DisciplineAction(Base):
     __table_args__ = (Index("ix_discipline_status_expiry", "status", "expires_at"),)
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # admin | viewer
+    role: Mapped[str] = mapped_column(String(16), default="viewer", nullable=False)
+    disabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Incremented to invalidate every existing session for this user.
+    session_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+    @property
+    def audit_name(self) -> str:
+        """Stable display label stored on audit entries."""
+        return (self.display_name or self.username)[:64]
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
@@ -97,6 +121,9 @@ class AuditLog(Base):
         UTCDateTime, default=utcnow, index=True, nullable=False
     )
     actor: Mapped[str] = mapped_column(String(64), default="system", nullable=False)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True
+    )
     action: Mapped[str] = mapped_column(String(48), index=True, nullable=False)
     target_mac: Mapped[str | None] = mapped_column(String(17), index=True, nullable=True)
     result: Mapped[str] = mapped_column(String(16), default="success", nullable=False)

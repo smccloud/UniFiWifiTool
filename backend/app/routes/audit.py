@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.auth import csrf_guard, require_user
+from app.auth import csrf_guard, get_current_user
 from app.db import get_db
 from app.models import AuditLog
 from app.schemas import AuditList, audit_out
@@ -11,7 +11,7 @@ from app.schemas import AuditList, audit_out
 router = APIRouter(
     prefix="/api/audit",
     tags=["audit"],
-    dependencies=[Depends(require_user), Depends(csrf_guard)],
+    dependencies=[Depends(get_current_user), Depends(csrf_guard)],
 )
 
 
