@@ -11,6 +11,7 @@ import {
   Spinner,
   StatCard,
   StatusDot,
+  useBodyScrollLock,
 } from "./components";
 import {
   describeSchedule,
@@ -622,6 +623,8 @@ function DeviceDrawer({
   const [customMinutes, setCustomMinutes] = useState("60");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  useBodyScrollLock();
 
   useEffect(() => {
     setLabel(device.label);

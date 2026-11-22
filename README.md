@@ -20,6 +20,7 @@ Docker deployment.
 - Applies schedule transitions automatically in the background.
 - Keeps an audit log of every login, change, block, and unblock, with configurable retention.
 - Includes light, dark, and follow-system themes.
+- Includes a responsive web UI for phone and tablet browsers.
 - Runs as a single non-root container with SQLite in `/data`.
 
 ## Screenshots

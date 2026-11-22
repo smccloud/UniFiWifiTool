@@ -316,6 +316,11 @@ stored in `localStorage`; System follows `prefers-color-scheme` live. A small
 external bootstrap script applies the saved theme before React renders to avoid
 a flash of the wrong theme.
 
+The layout is responsive: navigation wraps on phones, tables scroll inside their
+panel, drawers and modals use the full viewport on small screens, inputs use
+16px text to avoid iOS zoom, and safe-area insets are respected. A sidebar
+horizontal strip is used on narrow tablets; phones wrap the navigation instead.
+
 The schedule editor includes presets (allow weekdays, allow evenings, block
 overnight, block weekdays, weekend access), day toggles, timezone selection,
 multiple windows, per-window allow/block actions, a fallback state, and a
