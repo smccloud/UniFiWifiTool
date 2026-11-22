@@ -134,7 +134,7 @@ def create_device(
         notes=payload.notes.strip(),
         access_mode=payload.access_mode,
         source="manual",
-        created_by=user,
+        created_by=user.audit_name,
         effective_access=payload.access_mode,
     )
     db.add(device)

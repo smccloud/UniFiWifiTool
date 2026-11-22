@@ -228,6 +228,10 @@ pipeline {
                     set -eu
 
                     cleanup() {
+                        for container in "$AUTH_CONTAINER" "$SECURE_CONTAINER"; do
+                            echo "--- logs: $container ---"
+                            docker logs "$container" 2>&1 || true
+                        done
                         docker rm -f "$AUTH_CONTAINER" "$SECURE_CONTAINER" >/dev/null 2>&1 || true
                     }
                     trap cleanup EXIT
