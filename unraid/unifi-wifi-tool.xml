@@ -10,7 +10,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/smccloud/UniFiWifiTool</Support>
   <Project>https://github.com/smccloud/UniFiWifiTool</Project>
-  <Overview>Manage device access to UniFi WiFi with allow/block, per-client time-based schedules, temporary speed limits (Discipline Mode), and an audit log.</Overview>
+  <Overview>Manage device access to UniFi WiFi with allow/block, per-client time-based schedules, temporary speed limits (Discipline Mode), an audit log, and opt-in anonymous install telemetry.</Overview>
   <Category>Network:Other</Category>
   <WebUI>http://[IP]:[PORT:8000]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/smccloud/UniFiWifiTool/master/unraid/unifi-wifi-tool.xml</TemplateURL>
