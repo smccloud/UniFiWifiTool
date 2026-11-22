@@ -17,6 +17,7 @@ from app.auth import bootstrap_from_environment, user_count
 from app.config import Settings, get_settings
 from app.db import dispose_engine, get_session_factory, init_db
 from app.discipline import expire_due_actions
+from app.heartbeat import telemetry_loop
 from app.reconcile import SyncBusy, run_sync
 from app.retention import purge_if_due
 from app.routes import audit, auth, clients, devices, setup, system, users
@@ -118,13 +119,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         task: asyncio.Task | None = None
         if settings.scheduler_enabled:
             task = asyncio.create_task(_scheduler_loop(service, settings))
+        telemetry_task: asyncio.Task | None = None
+        if settings.telemetry_enabled:
+            telemetry_task = asyncio.create_task(telemetry_loop(settings))
+            logger.info("anonymous install tracking is enabled (opt-in)")
         try:
             yield
         finally:
-            if task is not None:
-                task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await task
+            for background_task in (task, telemetry_task):
+                if background_task is not None:
+                    background_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await background_task
             service.close()
             dispose_engine()
 

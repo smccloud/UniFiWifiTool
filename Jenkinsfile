@@ -118,6 +118,20 @@ pipeline {
             }
         }
 
+        stage('Telemetry PHP lint') {
+            steps {
+                sh '''
+                    set -eu
+                    docker run --rm \
+                        --network "$DOCKER_NETWORK" \
+                        -v "$WORKSPACE/telemetry:/src" \
+                        -w /src \
+                        php:8.3-cli \
+                        sh -ec "find . -name '*.php' -print0 | xargs -0 -n1 php -l"
+                '''
+            }
+        }
+
         stage('Docker build') {
             steps {
                 sh '''

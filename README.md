@@ -67,7 +67,7 @@ Docker Compose is optional. The image is designed to be run directly, including
 through unRAID's Docker Manager.
 
 ```bash
-docker pull smccloud/unifi-wifi-tool:1.0.0
+docker pull smccloud/unifi-wifi-tool:1.1.1
 
 mkdir -p /opt/unifi-wifi-tool
 docker run -d \
@@ -81,7 +81,7 @@ docker run -d \
   -e UNIFI_API_KEY='...' \
   -e UNIFI_USERNAME='unifi-service' \
   -e UNIFI_PASSWORD='...' \
-  smccloud/unifi-wifi-tool:1.0.0
+  smccloud/unifi-wifi-tool:1.1.1
 ```
 
 To build from source instead:
@@ -89,7 +89,7 @@ To build from source instead:
 ```bash
 git clone <this-repo> unifi-wifi-tool
 cd unifi-wifi-tool
-docker build -t smccloud/unifi-wifi-tool:1.0.0 .
+docker build -t smccloud/unifi-wifi-tool:1.1.1 .
 ```
 
 Open <http://localhost:8080> (or the host/IP where the container runs). On a
@@ -211,7 +211,7 @@ command against the same `/data` volume to create a recovery admin:
 
 ```bash
 docker run --rm -v /opt/unifi-wifi-tool:/data \
-  --entrypoint python smccloud/unifi-wifi-tool:1.0.0 -c "
+  --entrypoint python smccloud/unifi-wifi-tool:1.1.1 -c "
 from app.db import init_db, get_session_factory
 from app.models import User
 from app.auth import hash_password
@@ -290,6 +290,34 @@ limits are unavailable rather than blocking the device. Automatic restoration
 runs in the scheduler loop; with `SCHEDULER_ENABLED=false`, use **End speed
 limit** manually.
 
+## Anonymous install tracking (opt-in)
+
+Anonymous install tracking is **off by default**. When enabled, the app sends a
+small heartbeat once per day containing only:
+
+- a random install ID stored in `/data`,
+- the app version,
+- a coarse platform label such as `linux/amd64`,
+- the deployment type such as `docker` or `unraid`.
+
+It does **not** send or store IP addresses, MAC addresses, SSIDs, device names,
+controller URLs, credentials, or any other network data. The public page at
+<https://unifiwifitool.smccloud.com> shows aggregate counts only; an
+authenticated admin section lists anonymous install IDs.
+
+Enable it with:
+
+```bash
+TELEMETRY_ENABLED=true
+TELEMETRY_URL=https://unifiwifitool.smccloud.com/api/v1/heartbeat
+DEPLOYMENT_TYPE=unraid
+```
+
+The tracking service is a PHP 8 + MySQL/MariaDB application designed for
+shared hosting; it does not require Docker. Source and deployment notes are in
+[telemetry/](telemetry/README.md). The proposal and privacy requirements are
+tracked in [issue #3](https://github.com/smccloud/UniFiWifiTool/issues/3).
+
 ## Audit retention
 
 The audit log keeps login, access-change, block, and unblock history. By
@@ -345,13 +373,13 @@ cd frontend && npm run build
 ## Docker build and CI
 
 ```bash
-docker build -t smccloud/unifi-wifi-tool:1.0.0 .
+docker build -t smccloud/unifi-wifi-tool:1.1.1 .
 ```
 
 The `Jenkinsfile` builds and tests the image, then publishes successful
 `master` builds to Docker Hub (`smccloud/unifi-wifi-tool` by default) using the
 Jenkins username/password credentials named **Docker**. Images are pushed as
-`:1.0.0` (the version in `VERSION`) and `:latest`. Override the repository or
+`:1.1.1` (the version in `VERSION`) and `:latest`. Override the repository or
 credential ID with the
 `DOCKERHUB_REPOSITORY` and `DOCKERHUB_CREDENTIALS_ID` parameters; disable
 publishing with `PUSH_TO_DOCKERHUB=false`.
@@ -394,7 +422,7 @@ findings.
 
 ### Versioning
 
-The application version lives in [`VERSION`](VERSION) and is currently `1.0.0`.
+The application version lives in [`VERSION`](VERSION) and is currently `1.1.1`.
 The backend exposes it through `/api/auth/me`, `/api/system/status`, the health
 endpoint, and the UI footer/About panel. `frontend/package.json` and
 `.env.example`'s `IMAGE_VERSION` mirror it, and the backend test suite fails if
@@ -427,6 +455,10 @@ agents where bridge/veth creation is unavailable.
 | `AUTO_APPLY` | `true` | Apply desired states/schedules automatically. |
 | `DRY_RUN` | `false` | Log calls without sending them. |
 | `AUDIT_RETENTION_DAYS` | `0` | Days to keep audit entries; `0` = forever. UI override available. |
+| `TELEMETRY_ENABLED` | `false` | Opt in to anonymous install heartbeats. |
+| `TELEMETRY_URL` | tracking service | Anonymous heartbeat endpoint. |
+| `TELEMETRY_INTERVAL_SECONDS` | `86400` | Heartbeat interval, at least once per day. |
+| `DEPLOYMENT_TYPE` | `docker` | Coarse deployment label sent with heartbeats. |
 | `SCHEDULER_ENABLED` | `true` | Background reconciliation and retention loop. |
 | `SCHEDULER_INTERVAL_SECONDS` | `30` | Transition check interval. |
 | `ENABLE_SSID_ALLOWLIST` | `false` | Experimental per-SSID MAC filter writes. |

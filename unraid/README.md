@@ -6,8 +6,8 @@ This image is designed to run directly through unRAID's **Docker** tab
 ## 1. Use the published image
 
 The Jenkins pipeline publishes `smccloud/unifi-wifi-tool:latest` to Docker Hub
-on successful `master` builds, along with the version tag (currently `1.0.0`).
-The template uses `latest` by default; pin a version tag such as `:1.0.0` if you
+on successful `master` builds, along with the version tag (currently `1.1.1`).
+The template uses `latest` by default; pin a version tag such as `:1.1.1` if you
 prefer a fixed release.
 
 If you publish under a different namespace, change `<Repository>` in the XML.
@@ -44,7 +44,10 @@ PNG at 512×512 (for example with a headless browser or an SVG rasterizer).
      template; otherwise leave it empty and create the admin at `/setup` on
      first launch
    - **UNIFI_HOST**, **UNIFI_API_KEY**
-   - **UNIFI_USERNAME** and **UNIFI_PASSWORD** if you want block/unblock
+   - **UNIFI_USERNAME** and **UNIFI_PASSWORD** for block/unblock and
+     temporary speed limits
+   - Optional: **TELEMETRY_ENABLED=true** to opt in to anonymous install
+     heartbeats (off by default)
 5. Apply.
 
 The database is stored at:

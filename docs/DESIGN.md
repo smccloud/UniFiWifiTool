@@ -111,6 +111,10 @@ Rules:
 - Manual `allowed`/`blocked` modes override any stored schedule.
 - Schedules are evaluated by the background loop (default every 30 seconds)
   and applied only to explicitly managed devices.
+- Anonymous install tracking is opt-in. When enabled, the app stores a random
+  install ID locally and sends only that ID, the app version, a coarse platform
+  label, and the deployment type to the tracking service once per day. No IP or
+  network/device data is included.
 
 ### Why block/unblock rather than a true allowlist by default?
 
@@ -165,6 +169,7 @@ so both mechanisms can coexist.
 | `app/reconcile.py` | Discovery, drift detection, apply/audit, dry-run. |
 | `app/discipline.py` | Temporary speed-limit lifecycle and expiry restoration. |
 | `app/retention.py` | Audit retention settings, purge, and daily scheduling. |
+| `app/heartbeat.py` | Opt-in anonymous install heartbeat task. |
 | `app/routes/*` | JSON API for auth, setup, users, devices, clients, audit, and system settings. |
 | `app/main.py` | Lifespan, scheduler task, security headers, SPA and license serving. |
 
@@ -182,11 +187,21 @@ so both mechanisms can coexist.
   last seen, UniFi client ID, connection type).
 - provenance (`source`, `created_by`, timestamps).
 
+`users`
+
+Local Web UI accounts: unique case-insensitive username, optional display
+name, scrypt `password_hash`, role (`admin` or `viewer`), disabled flag,
+session version (incremented to revoke that user's sessions), and
+created/updated/last-login timestamps. Passwords are never stored in plaintext
+or returned by the API. `audit_log.user_id` references the acting user and is
+set to NULL if the user is deleted, leaving the `actor` display snapshot.
+
 `audit_log`
 
-Append-only except for configured retention: timestamp, actor, action, target
-MAC, result, JSON detail, request ID. Secrets are never recorded. Purging and
-retention changes are themselves audited.
+Append-only except for configured retention: timestamp, actor, user ID (when the
+action came from a Web UI account), action, target MAC, result, JSON detail,
+request ID. Secrets are never recorded. Purging and retention changes are
+themselves audited.
 
 `discipline_actions`
 
@@ -388,6 +403,17 @@ The wording is deliberately neutral and parental-control oriented.
 | Retention purge failure | Logged; the scheduler continues and retries on the next cycle. |
 | Scheduler disabled | Automatic sync and retention do not run; manual Sync/Purge still work. |
 
+### Install tracking service
+
+`telemetry/` contains a separate PHP 8 + MySQL/MariaDB application for the
+public stats page at `unifiwifitool.smccloud.com`. It is designed for shared
+hosting and does not require Docker. It stores install ID, first/last seen,
+version, platform, and deployment only. The application never reads or logs
+client IPs, and there are no IP columns in the database. Shared-host access logs
+must be checked separately and disabled by the provider where possible. The
+public page exposes aggregates; the admin page is HTTP Basic protected and shows
+anonymous install IDs.
+
 ## 11. Deployment
 
 - Multi-stage Docker build: Node builds the SPA; Python runtime serves API and
@@ -402,7 +428,7 @@ The wording is deliberately neutral and parental-control oriented.
 - The application version is read from the repo-root `VERSION` file (mirrored
   in `frontend/package.json` and `IMAGE_VERSION`) and exposed by the API/UI.
 - Jenkins publishes successful `master` builds to Docker Hub as
-  `smccloud/unifi-wifi-tool:<version>` (currently `1.0.0`) and `latest`, using
+  `smccloud/unifi-wifi-tool:<version>` (currently `1.1.1`) and `latest`, using
   the Jenkins credentials named `Docker`.
 - On unRAID, running as `--user 99:100` matches the usual appdata ownership;
   the image itself also has a non-root `app` user.
