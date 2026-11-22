@@ -88,6 +88,7 @@ export interface AuditEntry {
   id: number;
   created_at: string;
   actor: string;
+  user_id: number | null;
   action: string;
   target_mac: string | null;
   result: string;
@@ -184,10 +185,36 @@ export interface WifiNetwork {
 
 export interface Me {
   username: string;
+  user_id: number;
+  display_name: string;
+  role: Role;
   csrf_token: string;
   auth_disabled: boolean;
   app_name: string;
   version: string;
+}
+
+export type Role = "admin" | "viewer";
+
+export interface User {
+  id: number;
+  username: string;
+  display_name: string;
+  role: Role;
+  disabled: boolean;
+  created_at: string;
+  updated_at: string;
+  last_login_at: string | null;
+}
+
+export interface UserList {
+  items: User[];
+  total: number;
+}
+
+export interface SetupStatus {
+  setup_required: boolean;
+  csrf_token: string;
 }
 
 export interface LicenseInfo {

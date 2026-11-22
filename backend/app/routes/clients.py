@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.auth import csrf_guard, require_user
+from app.auth import csrf_guard, get_current_user
 from app.db import get_db
 from app.deps import get_service
 from app.models import Device
@@ -14,7 +14,7 @@ from app.unifi.service import UniFiService
 router = APIRouter(
     prefix="/api",
     tags=["clients"],
-    dependencies=[Depends(require_user), Depends(csrf_guard)],
+    dependencies=[Depends(get_current_user), Depends(csrf_guard)],
 )
 
 

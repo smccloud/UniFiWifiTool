@@ -76,8 +76,6 @@ docker run -d \
   --init \
   -p 8080:8000 \
   -v /opt/unifi-wifi-tool:/data \
-  -e APP_USERNAME=admin \
-  -e APP_PASSWORD='choose-a-strong-password' \
   -e SECRET_KEY="$(openssl rand -base64 48)" \
   -e UNIFI_HOST='https://192.168.1.1' \
   -e UNIFI_API_KEY='...' \
@@ -94,7 +92,11 @@ cd unifi-wifi-tool
 docker build -t smccloud/unifi-wifi-tool:0.9.0 .
 ```
 
-Open <http://localhost:8080> (or the host/IP where the container runs).
+Open <http://localhost:8080> (or the host/IP where the container runs). On a
+fresh install with no users, the app shows a one-time setup screen at `/setup`
+to create the first administrator. Set `APP_PASSWORD` (and optionally
+`APP_USERNAME`) instead if you need an unattended install; it is imported as the
+first admin at startup and ignored once any user exists.
 
 - **unRAID:** see [unraid/README.md](unraid/README.md) and the template at
   [unraid/unifi-wifi-tool.xml](unraid/unifi-wifi-tool.xml).
@@ -163,9 +165,35 @@ additive; an existing database is migrated automatically on startup.
 Prefer `UNIFI_CA_BUNDLE` for a private/self-signed certificate. Only set
 `UNIFI_TLS_INSECURE=true` if you understand the risk.
 
-### Password hash (optional)
+### Users and roles
 
-Instead of keeping `APP_PASSWORD` in the environment, generate a hash:
+Users live in the app's SQLite database (`/data/unifi-wifi.db`) in a `users`
+table. Passwords are stored only as salted **scrypt** hashes and can never be
+read back.
+
+- **First run:** with no users, `/setup` asks for a username, optional display
+  name, and password, then creates an administrator. There are no default
+  credentials.
+- **Admin:** full access, including Settings -> Users and device changes.
+- **Viewer:** read-only access to devices, live clients, audit, and status.
+  Mutating API calls return `403`.
+- **Manage users:** Settings -> Users. You can add users, change roles,
+  disable an account, reset a password, sign a device out, and delete users.
+  The last enabled administrator cannot be demoted, disabled, or deleted.
+- **Sessions:** each account has a session version. Changing a password,
+  changing a role, or disabling an account invalidates that user's existing
+  sessions immediately. Your own password change keeps your current session.
+- **Your account:** Settings -> Your account changes your own password.
+
+Existing installs that still use `APP_PASSWORD` / `APP_PASSWORD_HASH` keep
+working: on first start the environment account is imported as the first admin
+and the setup screen is skipped. Once users exist, environment credentials no
+longer grant access.
+
+#### Password hash (optional bootstrap)
+
+To seed the first admin without a plaintext password in the environment,
+generate a hash and set `APP_PASSWORD_HASH`:
 
 ```bash
 cd backend
@@ -174,7 +202,28 @@ python -m venv .venv
 .venv/bin/python -c "from app.auth import hash_password; print(hash_password('your-password'))"
 ```
 
-Set `APP_PASSWORD_HASH` to the output and remove `APP_PASSWORD`.
+Remove `APP_PASSWORD` when using `APP_PASSWORD_HASH`.
+
+#### Recovering access
+
+If the only administrator is lost, stop the container and run a one-off
+command against the same `/data` volume to create a recovery admin:
+
+```bash
+docker run --rm -v /opt/unifi-wifi-tool:/data \
+  --entrypoint python smccloud/unifi-wifi-tool:0.9.0 -c "
+from app.db import init_db, get_session_factory
+from app.models import User
+from app.auth import hash_password
+init_db()
+db = get_session_factory()()
+db.add(User(username='recovery', display_name='Recovery', role='admin',
+            password_hash=hash_password('a-long-recovery-password')))
+db.commit()
+"
+```
+
+Sign in as `recovery`, fix the existing accounts, then delete the recovery user.
 
 ## Using time-based access
 
@@ -364,7 +413,8 @@ agents where bridge/veth creation is unavailable.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `APP_USERNAME` / `APP_PASSWORD` | `admin` / required | Web UI login. |
+| `APP_USERNAME` / `APP_PASSWORD` | `admin` / — | Optional bootstrap admin; used only when no users exist. |
+| `APP_PASSWORD_HASH` | — | Bootstrap admin as a scrypt hash instead of a plaintext password. |
 | `SECRET_KEY` | required | Session signing key. |
 | `COOKIE_SECURE` | `false` | Set `true` when served over HTTPS. |
 | `UNIFI_HOST` | — | Console URL/IP. |
@@ -390,6 +440,10 @@ See [.env.example](.env.example) for the full list.
 
 - Put the app behind HTTPS and set `COOKIE_SECURE=true` for anything beyond a
   trusted LAN.
+- User accounts are stored in SQLite with scrypt password hashes. Use a unique
+  password per person and give read-only users the Viewer role.
+- Complete first-run setup before exposing the app to an untrusted network;
+  until then anyone who can reach the port can claim the first admin account.
 - Use a dedicated local-only UniFi admin; never a Super Admin.
 - API keys inherit the creating admin's role and have no per-key scopes.
 - Never commit `.env`. The container stores only inventory/schedules/audit in
@@ -405,7 +459,7 @@ See [.env.example](.env.example) for the full list.
 - Strict SSID allowlist management with batched applies and blast-radius warnings.
 - Notifications (email/webhook) for access changes and controller outages.
 - CSV import/export.
-- OIDC and multi-user roles.
+- OIDC/SSO for external identity providers (local users and roles are implemented).
 - Multiple controllers/sites.
 - Prometheus metrics and certificate pinning.
 
