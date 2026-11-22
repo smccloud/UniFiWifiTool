@@ -41,7 +41,10 @@ PNG at 512×512 (for example with a headless browser or an SVG rasterizer).
    - **Web UI** port: usually `8080` → container port `8000`
    - **APP_PASSWORD** and **SECRET_KEY**
    - **UNIFI_HOST**, **UNIFI_API_KEY**
-   - **UNIFI_USERNAME** and **UNIFI_PASSWORD** if you want block/unblock
+   - **UNIFI_USERNAME** and **UNIFI_PASSWORD** for block/unblock and
+     temporary speed limits
+   - Optional: **TELEMETRY_ENABLED=true** to opt in to anonymous install
+     heartbeats (off by default)
 5. Apply.
 
 The database is stored at:

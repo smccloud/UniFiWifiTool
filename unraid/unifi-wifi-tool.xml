@@ -10,7 +10,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/smccloud/UniFiWifiTool</Support>
   <Project>https://github.com/smccloud/UniFiWifiTool</Project>
-  <Overview>Manage which devices may access UniFi WiFi, including per-client allow and block schedules, with an audit log.</Overview>
+  <Overview>Manage device access to UniFi WiFi with allow/block, per-client time-based schedules, temporary speed limits (Discipline Mode), and an audit log.</Overview>
   <Category>Network:Other</Category>
   <WebUI>http://[IP]:[PORT:8000]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/smccloud/UniFiWifiTool/master/unraid/unifi-wifi-tool.xml</TemplateURL>
@@ -30,10 +30,12 @@
   <Config Name="SECRET_KEY" Target="SECRET_KEY" Default="" Mode="" Description="Long random session signing key (openssl rand -base64 48)" Type="Variable" Display="always" Required="true" Mask="true"/>
   <Config Name="UNIFI_HOST" Target="UNIFI_HOST" Default="" Mode="" Description="Controller URL, e.g. https://192.168.1.1" Type="Variable" Display="always" Required="true" Mask="false"/>
   <Config Name="UNIFI_API_KEY" Target="UNIFI_API_KEY" Default="" Mode="" Description="Settings -> Control Plane -> Integrations API key" Type="Variable" Display="always" Required="false" Mask="true"/>
-  <Config Name="UNIFI_USERNAME" Target="UNIFI_USERNAME" Default="" Mode="" Description="Local-only UniFi admin for block/unblock" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="UNIFI_USERNAME" Target="UNIFI_USERNAME" Default="" Mode="" Description="Local-only UniFi admin for block/unblock and temporary speed limits" Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="UNIFI_PASSWORD" Target="UNIFI_PASSWORD" Default="" Mode="" Description="Password for the local-only UniFi admin" Type="Variable" Display="always" Required="false" Mask="true"/>
   <Config Name="UNIFI_SITE_ID" Target="UNIFI_SITE_ID" Default="" Mode="" Description="Optional site UUID (multi-site consoles)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="UNIFI_SITE" Target="UNIFI_SITE" Default="default" Mode="" Description="Classic API site name" Type="Variable" Display="advanced" Required="false" Mask="false">default</Config>
+  <Config Name="UNIFI_WIFI_NAME" Target="UNIFI_WIFI_NAME" Default="" Mode="" Description="Optional SSID name for experimental per-SSID allowlist writes" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="UNIFI_OS" Target="UNIFI_OS" Default="true" Mode="" Description="UniFi OS console (true) or legacy controller (false)" Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
   <Config Name="APP_TIMEZONE" Target="APP_TIMEZONE" Default="UTC" Mode="" Description="Default schedule timezone (IANA name)" Type="Variable" Display="advanced" Required="false" Mask="false">UTC</Config>
   <Config Name="AUTO_APPLY" Target="AUTO_APPLY" Default="true" Mode="" Description="Apply desired states and schedules automatically" Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
   <Config Name="DRY_RUN" Target="DRY_RUN" Default="false" Mode="" Description="Log intended controller calls without sending them" Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
@@ -46,6 +48,7 @@
   <Config Name="SCHEDULER_INTERVAL_SECONDS" Target="SCHEDULER_INTERVAL_SECONDS" Default="30" Mode="" Description="Schedule evaluation interval" Type="Variable" Display="advanced" Required="false" Mask="false">30</Config>
   <Config Name="DISCOVERY_ENABLED" Target="DISCOVERY_ENABLED" Default="true" Mode="" Description="Import connected WiFi clients as unmanaged devices" Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
   <Config Name="COOKIE_SECURE" Target="COOKIE_SECURE" Default="false" Mode="" Description="Set true only when the Web UI is behind HTTPS" Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="TRUST_PROXY" Target="TRUST_PROXY" Default="false" Mode="" Description="Set true only behind a trusted reverse proxy" Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
   <Config Name="UNIFI_TLS_VERIFY" Target="UNIFI_TLS_VERIFY" Default="true" Mode="" Description="Verify the controller TLS certificate" Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
   <Config Name="UNIFI_CA_BUNDLE" Target="UNIFI_CA_BUNDLE" Default="" Mode="" Description="Optional CA bundle path for a private certificate" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="UNIFI_TLS_INSECURE" Target="UNIFI_TLS_INSECURE" Default="false" Mode="" Description="Disable TLS verification (not recommended)" Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
