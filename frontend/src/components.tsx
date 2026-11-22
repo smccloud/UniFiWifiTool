@@ -74,6 +74,16 @@ export function StatCard({
   );
 }
 
+export function useBodyScrollLock() {
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+}
+
 export function ErrorBanner({ message, onDismiss }: { message: string; onDismiss?: () => void }) {
   return (
     <div className="banner banner-error" role="alert">
@@ -88,7 +98,11 @@ export function ErrorBanner({ message, onDismiss }: { message: string; onDismiss
 }
 
 export function InfoBanner({ children }: { children: ReactNode }) {
-  return <div className="banner banner-info">{children}</div>;
+  return (
+    <div className="banner banner-info">
+      <span className="banner-text">{children}</span>
+    </div>
+  );
 }
 
 export function EmptyState({ title, hint }: { title: string; hint?: string }) {
@@ -123,6 +137,8 @@ export function Modal({
   footer?: ReactNode;
   wide?: boolean;
 }) {
+  useBodyScrollLock();
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
