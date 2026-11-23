@@ -243,10 +243,10 @@ Per Issue #10, the app **never queues destructive mutations offline**.
 
 ## 7. Planned Android Module & Architecture Framework
 
-When implementation begins, the Android project (`android/`) will follow modern Android architecture guidelines without third-party analytics or tracking SDKs:
+When implementation begins, the Android project (`Android/`) will follow modern Android architecture guidelines without third-party analytics or tracking SDKs:
 
 ```
-android/
+Android/
   app/
     src/main/java/com/smccloud/unifiwifitool/
       ui/
