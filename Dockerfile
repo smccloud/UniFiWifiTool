@@ -14,9 +14,7 @@ RUN npm run build
 # ---------------------------------------------------------------------------
 # Runtime
 # ---------------------------------------------------------------------------
-FROM python:3.13-slim AS runtime
-
-ARG DEBIAN_FRONTEND=noninteractive
+FROM python:3.13-alpine AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -25,13 +23,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Apply the available Debian security update for zlib1g.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends zlib1g \
-    && rm -rf /var/lib/apt/lists/*
+# Apply the available Alpine security updates to the base packages.
+RUN apk upgrade --no-cache
 
-RUN groupadd --system app \
-    && useradd --system --gid app --home-dir /app --shell /usr/sbin/nologin app
+RUN addgroup -S app \
+    && adduser -S -G app -h /app -H -s /sbin/nologin app
 
 COPY backend/requirements.txt ./requirements.txt
 # pip and setuptools are build-time tools; the application does not use them at

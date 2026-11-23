@@ -22,6 +22,14 @@ case "$OUT_DIR" in
 esac
 mkdir -p "$OUT_DIR"
 
+# The statements below describe Debian packages. Skip them for images that are
+# not Debian-based (for example the Alpine/musl runtime), because Docker Scout
+# cannot match Debian VEX statements to packages from another distribution.
+if ! docker run --rm --entrypoint sh "$IMAGE" -c 'command -v dpkg-query >/dev/null 2>&1'; then
+  printf '%s is not Debian-based; skipping Debian VEX statements\n' "$IMAGE" >&2
+  exit 0
+fi
+
 generate_vex() {
   local cve="$1"
   local binary_package="$2"
