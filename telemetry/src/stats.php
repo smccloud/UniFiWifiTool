@@ -1,19 +1,6 @@
 <?php
 declare(strict_types=1);
 
-function active_counts(PDO $db): array
-{
-    $counts = [];
-    foreach (['24h' => 86400, '7d' => 7 * 86400, '30d' => 30 * 86400] as $key => $seconds) {
-        $since = gmdate('Y-m-d H:i:s', time() - $seconds);
-        $stmt = $db->prepare('SELECT COUNT(*) FROM installs WHERE last_seen >= ?');
-        $stmt->execute([$since]);
-        $counts[$key] = (int) $stmt->fetchColumn();
-    }
-    $counts['total'] = (int) $db->query('SELECT COUNT(*) FROM installs')->fetchColumn();
-    return $counts;
-}
-
 function distribution(PDO $db, string $column, string $since): array
 {
     $allowed = ['app_version', 'platform', 'deployment'];
@@ -37,11 +24,8 @@ function stats(PDO $db): array
 {
     $since30 = gmdate('Y-m-d H:i:s', time() - 30 * 86400);
     return [
-        'counts' => active_counts($db),
         'versions' => distribution($db, 'app_version', $since30),
         'platforms' => distribution($db, 'platform', $since30),
-        'deployments' => distribution($db, 'deployment', $since30),
-        'updated_at' => gmdate('Y-m-d H:i:s'),
     ];
 }
 

@@ -302,7 +302,7 @@ small heartbeat once per day containing only:
 
 It does **not** send or store IP addresses, MAC addresses, SSIDs, device names,
 controller URLs, credentials, or any other network data. The public page at
-<https://unifiwifitool.smccloud.com> shows aggregate counts only; an
+<https://unifiwifitool.smccloud.com> shows no statistics; an
 authenticated admin section lists anonymous install IDs.
 
 Enable it with:

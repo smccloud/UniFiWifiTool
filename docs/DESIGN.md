@@ -406,13 +406,13 @@ The wording is deliberately neutral and parental-control oriented.
 ### Install tracking service
 
 `telemetry/` contains a separate PHP 8 + MySQL/MariaDB application for the
-public stats page at `unifiwifitool.smccloud.com`. It is designed for shared
+public telemetry page at `unifiwifitool.smccloud.com`. It is designed for shared
 hosting and does not require Docker. It stores install ID, first/last seen,
 version, platform, and deployment only. The application never reads or logs
 client IPs, and there are no IP columns in the database. Shared-host access logs
 must be checked separately and disabled by the provider where possible. The
-public page exposes aggregates; the admin page is HTTP Basic protected and shows
-anonymous install IDs.
+public page shows no statistics; the admin page is HTTP Basic protected and
+shows anonymous install IDs.
 
 ## 11. Deployment
 

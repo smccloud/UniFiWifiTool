@@ -114,14 +114,8 @@ if ($path === '/api/v1/heartbeat' && $method === 'POST') {
     handle_heartbeat($config);
 }
 
-if ($path === '/api/v1/stats' && $method === 'GET') {
-    $db = db($config);
-    json_response(stats($db), 200, ['Cache-Control' => 'public, max-age=60']);
-}
-
 if ($path === '/' && $method === 'GET') {
-    $db = db($config);
-    render_public(stats($db));
+    render_public(gmdate('Y-m-d H:i:s'));
     exit;
 }
 
