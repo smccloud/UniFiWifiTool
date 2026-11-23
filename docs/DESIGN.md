@@ -428,7 +428,7 @@ shows anonymous install IDs.
 - The application version is read from the repo-root `VERSION` file (mirrored
   in `frontend/package.json` and `IMAGE_VERSION`) and exposed by the API/UI.
 - Jenkins publishes successful `master` builds to Docker Hub as
-  `smccloud/unifi-wifi-tool:<version>` (currently `1.1.3`) and `latest`, using
+  `smccloud/unifi-wifi-tool:<version>` (currently `1.2.0`) and `latest`, using
   the Jenkins credentials named `Docker`.
 - On unRAID, running as `--user 99:100` matches the usual appdata ownership;
   the image itself also has a non-root `app` user.
