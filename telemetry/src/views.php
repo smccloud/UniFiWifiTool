@@ -38,11 +38,11 @@ function render_header(string $title): void
         <span class="brand-mark">◎</span>
         <span>
           <strong>UniFi WiFi Access Manager</strong>
-          <small>Anonymous install stats</small>
+          <small>Anonymous telemetry</small>
         </span>
       </a>
       <nav>
-        <a href="/">Public stats</a>
+        <a href="/">Telemetry</a>
         <a href="/admin">Admin</a>
         <a href="https://github.com/smccloud/UniFiWifiTool">GitHub</a>
       </nav>
@@ -63,74 +63,19 @@ function render_footer(): void
 <?php
 }
 
-function render_public(array $stats): void
+function render_public(string $updatedAt): void
 {
-    render_header('Active installs · UniFi WiFi Access Manager');
+    render_header('Anonymous telemetry · UniFi WiFi Access Manager');
     ?>
       <section class="hero">
-        <p class="eyebrow">Anonymous telemetry</p>
-        <h1>Active installs</h1>
+        <h1>Anonymous telemetry</h1>
         <p class="lede">
           Aggregate counts from installations that opted in to anonymous install tracking.
           No IP addresses, WiFi names, device names, or controller details are collected.
         </p>
       </section>
 
-      <section class="cards">
-        <div class="card"><span>Active last 24 hours</span><strong><?= (int) $stats['counts']['24h'] ?></strong></div>
-        <div class="card"><span>Active last 7 days</span><strong><?= (int) $stats['counts']['7d'] ?></strong></div>
-        <div class="card"><span>Active last 30 days</span><strong><?= (int) $stats['counts']['30d'] ?></strong></div>
-        <div class="card"><span>Known installs</span><strong><?= (int) $stats['counts']['total'] ?></strong></div>
-      </section>
-
-      <div class="grid">
-        <section class="panel">
-          <h2>Versions</h2>
-          <p class="muted">Active installs in the last 30 days</p>
-          <?php if ($stats['versions']): ?>
-          <table>
-            <thead><tr><th>Version</th><th class="right">Installs</th></tr></thead>
-            <tbody>
-              <?php foreach ($stats['versions'] as $row): ?>
-              <tr><td><?= h((string) $row['label']) ?></td><td class="right"><?= (int) $row['install_count'] ?></td></tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
-          <?php else: ?><p class="empty">No data yet.</p><?php endif; ?>
-        </section>
-
-        <section class="panel">
-          <h2>Platforms</h2>
-          <p class="muted">Active installs in the last 30 days</p>
-          <?php if ($stats['platforms']): ?>
-          <table>
-            <thead><tr><th>Platform</th><th class="right">Installs</th></tr></thead>
-            <tbody>
-              <?php foreach ($stats['platforms'] as $row): ?>
-              <tr><td><?= h((string) $row['label']) ?></td><td class="right"><?= (int) $row['install_count'] ?></td></tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
-          <?php else: ?><p class="empty">No data yet.</p><?php endif; ?>
-        </section>
-
-        <section class="panel">
-          <h2>Deployments</h2>
-          <p class="muted">Active installs in the last 30 days</p>
-          <?php if ($stats['deployments']): ?>
-          <table>
-            <thead><tr><th>Deployment</th><th class="right">Installs</th></tr></thead>
-            <tbody>
-              <?php foreach ($stats['deployments'] as $row): ?>
-              <tr><td><?= h((string) $row['label']) ?></td><td class="right"><?= (int) $row['install_count'] ?></td></tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
-          <?php else: ?><p class="empty">No data yet.</p><?php endif; ?>
-        </section>
-      </div>
-
-      <p class="updated">Last updated <?= h(format_utc($stats['updated_at'])) ?>.</p>
+      <p class="updated">Last updated <?= h(format_utc($updatedAt)) ?>.</p>
 <?php
     render_footer();
 }
@@ -260,7 +205,7 @@ function render_admin(
         <p class="muted">
           Installs that have not sent a heartbeat in <?= (int) $retentionDays ?> days are
           pruned automatically once per day and can also be pruned here. The public page
-          only shows aggregate counts; individual install IDs are visible only in this
+          shows no statistics; individual install IDs are visible only in this
           authenticated section.
         </p>
         <form method="post" action="/admin/prune">

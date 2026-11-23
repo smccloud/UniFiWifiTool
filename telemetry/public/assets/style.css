@@ -56,14 +56,7 @@ h1 { margin: 0; font-size: 34px; letter-spacing: -.03em; }
 h2 { margin: 0 0 4px; font-size: 17px; }
 .lede { max-width: 720px; margin: 8px 0 0; color: var(--muted); }
 
-.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
-.card, .panel { border: 1px solid var(--border); border-radius: 14px; background: linear-gradient(180deg, rgba(17, 28, 48, .94), rgba(12, 21, 37, .94)); }
-.card { padding: 16px; }
-.card span { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
-.card strong { display: block; margin-top: 3px; font-size: 31px; letter-spacing: -.03em; }
-
-.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.panel { padding: 18px; margin-bottom: 12px; }
+.panel { border: 1px solid var(--border); border-radius: 14px; background: linear-gradient(180deg, rgba(17, 28, 48, .94), rgba(12, 21, 37, .94)); padding: 18px; margin-bottom: 12px; }
 .panel h2 { margin-bottom: 2px; }
 .panel > .muted { margin: 0 0 12px; }
 
@@ -91,7 +84,5 @@ select, input { padding: 8px 10px; border: 1px solid var(--border); border-radiu
 footer { max-width: 1180px; margin: 0 auto; padding: 20px 24px 40px; color: var(--muted); font-size: 12px; }
 
 @media (max-width: 850px) {
-  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .grid { grid-template-columns: 1fr; }
   .topbar { align-items: flex-start; flex-direction: column; }
 }

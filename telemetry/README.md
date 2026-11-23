@@ -19,7 +19,7 @@ credentials, or device names are collected or stored.
 
 - The heartbeat handler never reads `REMOTE_ADDR` or request headers.
 - There are no IP columns in the database.
-- The public page shows aggregate counts only.
+- The public page shows no statistics.
 - Individual install IDs are visible only behind HTTP Basic authentication.
 - Client tracking is **opt-in**: the main application sends nothing unless
   `TELEMETRY_ENABLED=true`.
@@ -90,8 +90,7 @@ telemetry/
 
 ## Routes
 
-- `/` — public aggregate stats.
-- `/api/v1/stats` — JSON aggregate stats.
+- `/` — public telemetry notice (no statistics).
 - `/api/v1/heartbeat` — anonymous heartbeat receiver.
 - `/admin` — HTTP Basic authenticated install list and filters.
 - `/admin/prune` — authenticated retention prune action.
