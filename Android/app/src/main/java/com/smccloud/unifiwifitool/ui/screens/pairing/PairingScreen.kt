@@ -45,7 +45,7 @@ fun PairingScreen(
     initialDeviceName: String,
     biometricEnabled: Boolean,
     onBiometricEnabledChange: (Boolean) -> Unit,
-    onCompletePairing: (deviceName: String, relayUrl: String) -> Unit,
+    onCompletePairing: (deviceName: String, relayUrl: String, pairingSecret: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var deviceName by remember { mutableStateOf(initialDeviceName) }
@@ -193,7 +193,13 @@ fun PairingScreen(
             }
 
             Button(
-                onClick = { onCompletePairing(deviceName.ifBlank { "Android Phone" }, relayUrl) },
+                onClick = {
+                    onCompletePairing(
+                        deviceName.ifBlank { "Android Phone" },
+                        relayUrl,
+                        pairingCode
+                    )
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Exchange Pairing Secret & Connect")

@@ -243,27 +243,49 @@ Per Issue #10, the app **never queues destructive mutations offline**.
 
 ## 7. Planned Android Module & Architecture Framework
 
-When implementation begins, the Android project (`Android/`) will follow modern Android architecture guidelines without third-party analytics or tracking SDKs:
+The project is organised as a single `:app` module without third-party analytics
+or tracking SDKs:
 
 ```
 Android/
-  app/
-    src/main/java/com/smccloud/unifiwifitool/
-      ui/
-        theme/          # Color.kt (Light/Dark tokens), Type.kt, Shape.kt, Theme.kt
-        navigation/     # Top-level NavigationBar / NavigationRail & routes
-        components/     # StatusBadge, DeviceCard, ConnectionBanner, ConfirmSheet
-        screens/
-          pairing/      # QR scanner, manual pair, biometric opt-in
-          overview/     # Dashboard tiles, active discipline, sync status
-          devices/      # Device list, detail bottom sheet, schedule editor
-          discipline/   # Active speed limits & quick-start flow
-          audit/        # Filterable audit timeline
-          settings/     # Theme switcher, biometric lock, connection details
-      data/
-        transport/      # E2EE relay client + local LAN/VPN HTTPS client
-        keystore/       # Android Keystore token storage & BiometricPrompt gate
-        repository/     # Read-through memory/Room cache with explicit freshness timestamps
-      domain/
-        model/          # Device, AccessMode, ScheduleWindow, DisciplineAction, AuditEntry
+  app/src/main/java/com/smccloud/unifiwifitool/
+    MainActivity.kt          # FragmentActivity, edge-to-edge, BiometricGate wiring
+    ui/
+      AccessViewModel.kt     # AccessUiState + AccessActions, offline handling
+      AccessActions.kt       # UI action contract + preview no-op
+      model/                 # UI models and preview sample data
+      theme/                 # M3 light/dark tokens, type, shape, status colors
+      navigation/            # Top-level destinations
+      components/            # Badges, tunnel pill, banner, device card, dialogs
+      screens/               # Pairing, overview, devices, discipline, audit, lock, settings
+    data/
+      settings/              # Non-secret preferences and pairing metadata
+      keystore/              # Android Keystore AES-256-GCM token storage
+      biometric/             # BiometricPrompt coroutine wrapper
+      transport/             # AccessApi, direct HTTPS client, wire DTOs
+        relay/               # Outbound WebSocket + AES-GCM frame cipher
+      repository/            # Remote repository and offline demo repository
 ```
+
+## 8. Android implementation status
+
+Implemented on `feature/mobile-app`:
+
+- M3 Compose UI for every screen and flow in this document, including light,
+  dark, and optional Android 12+ dynamic color.
+- `AccessViewModel` owns all UI state, refuses mutations while the home
+  instance or controller is unreachable, and records mobile-attributed audit
+  entries.
+- Device token and relay session key are sealed with a non-exportable Android
+  Keystore AES-256-GCM key; only IV + ciphertext reach SharedPreferences.
+- `BiometricGate` wraps `BiometricPrompt`; the app locks on launch when enabled.
+- Transport split: direct HTTPS client (TLS verification on, optional pins) and
+  an outbound relay WebSocket whose frames carry only a request id plus an
+  AES-GCM sealed payload.
+- `./gradlew assembleDebug` produces a debug APK (verified with AGP 9.1,
+  Kotlin 2.4, Gradle 9.5, SDK 36).
+
+Pending (tracked by issue #10): the backend `/api/mobile/pair` endpoint, relay
+service, push registration, and server-side per-device revocation. Until then
+the pairing button enters an explicitly labelled offline demo mode.
+

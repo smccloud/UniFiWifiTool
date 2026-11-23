@@ -25,23 +25,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.smccloud.unifiwifitool.ui.components.ConnectionStateBanner
 import com.smccloud.unifiwifitool.ui.components.TunnelStatusPill
-import com.smccloud.unifiwifitool.ui.model.AccessMode
-import com.smccloud.unifiwifitool.ui.model.AuditEntryUiModel
-import com.smccloud.unifiwifitool.ui.model.DeviceScheduleUiModel
-import com.smccloud.unifiwifitool.ui.model.DeviceUiModel
-import com.smccloud.unifiwifitool.ui.model.DisciplineUiModel
-import com.smccloud.unifiwifitool.ui.model.SampleUiData
 import com.smccloud.unifiwifitool.ui.model.ThemePreference
 import com.smccloud.unifiwifitool.ui.model.TunnelState
 import com.smccloud.unifiwifitool.ui.navigation.AppDestination
@@ -50,183 +42,47 @@ import com.smccloud.unifiwifitool.ui.screens.devices.DeviceDetailSheet
 import com.smccloud.unifiwifitool.ui.screens.devices.DevicesScreen
 import com.smccloud.unifiwifitool.ui.screens.devices.ScheduleEditorDialog
 import com.smccloud.unifiwifitool.ui.screens.discipline.DisciplineScreen
+import com.smccloud.unifiwifitool.ui.screens.lock.LockScreen
 import com.smccloud.unifiwifitool.ui.screens.overview.OverviewScreen
 import com.smccloud.unifiwifitool.ui.screens.pairing.PairingScreen
 import com.smccloud.unifiwifitool.ui.screens.settings.SettingsSheet
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UniFiWifiToolApp(
-    themePreference: ThemePreference,
-    onThemePreferenceChange: (ThemePreference) -> Unit,
-    useDynamicColor: Boolean,
-    onDynamicColorChange: (Boolean) -> Unit
+    state: AccessUiState,
+    actions: AccessActions,
+    events: Flow<String> = emptyFlow(),
+    canUseBiometrics: Boolean = false,
+    onRequestBiometricUnlock: () -> Unit = {}
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
-    var isPaired by remember { mutableStateOf(true) }
-    var biometricLockEnabled by remember { mutableStateOf(true) }
-    var pairedInstance by remember { mutableStateOf(SampleUiData.pairedInstance) }
-    var tunnelState by remember { mutableStateOf(TunnelState.CONNECTED) }
+    LaunchedEffect(events) {
+        events.collect { message -> snackbarHostState.showSnackbar(message) }
+    }
 
-    var currentDestination by remember { mutableStateOf(AppDestination.OVERVIEW) }
-    var devices by remember { mutableStateOf(SampleUiData.initialDevices) }
-    var auditEntries by remember { mutableStateOf(SampleUiData.initialAuditEntries) }
-
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedDeviceFilter by remember { mutableStateOf("All") }
-
-    var activeSheetDeviceId by remember { mutableStateOf<Int?>(null) }
-    var scheduleEditorDeviceId by remember { mutableStateOf<Int?>(null) }
-    var showSettingsSheet by remember { mutableStateOf(false) }
-
-    if (!isPaired) {
+    if (!state.isPaired) {
         PairingScreen(
-            initialDeviceName = pairedInstance.mobileDeviceName,
-            biometricEnabled = biometricLockEnabled,
-            onBiometricEnabledChange = { biometricLockEnabled = it },
-            onCompletePairing = { newDeviceName, newRelayUrl ->
-                pairedInstance = pairedInstance.copy(
-                    mobileDeviceName = newDeviceName,
-                    relayEndpoint = newRelayUrl,
-                    lastSyncLabel = "Updated just now"
-                )
-                tunnelState = TunnelState.CONNECTED
-                isPaired = true
+            initialDeviceName = state.pairedInstance.mobileDeviceName,
+            biometricEnabled = state.biometricLockEnabled,
+            onBiometricEnabledChange = actions::onBiometricLockChange,
+            onCompletePairing = { deviceName, relayUrl, secret ->
+                actions.onPair(deviceName, relayUrl, secret)
             }
         )
         return
     }
 
-    val recordAudit: (String, DeviceUiModel?, String) -> Unit = { action, target, detailJson ->
-        val nextId = (auditEntries.maxOfOrNull { it.id } ?: 500) + 1
-        val entry = AuditEntryUiModel(
-            id = nextId,
-            timestampUtc = "2026-11-23 16:25 UTC",
-            relativeTime = "Just now",
-            action = action,
-            result = "ok",
-            targetLabel = target?.label,
-            targetMac = target?.mac,
-            actor = "mobile: ${pairedInstance.mobileDeviceName}",
-            detailJson = detailJson
+    if (state.isLocked) {
+        LockScreen(
+            canUseBiometrics = canUseBiometrics,
+            onUnlockClick = onRequestBiometricUnlock
         )
-        auditEntries = listOf(entry) + auditEntries
+        return
     }
-
-    val handleAccessModeChange: (Int, AccessMode) -> Unit = { deviceId, newMode ->
-        val target = devices.find { it.id == deviceId }
-        if (target != null) {
-            val effective = when (newMode) {
-                AccessMode.ALLOWED -> AccessMode.ALLOWED
-                AccessMode.BLOCKED -> AccessMode.BLOCKED
-                AccessMode.SCHEDULED -> AccessMode.ALLOWED
-                AccessMode.IGNORED -> AccessMode.IGNORED
-            }
-            devices = devices.map {
-                if (it.id == deviceId) {
-                    it.copy(
-                        accessMode = newMode,
-                        effectiveAccess = effective,
-                        observedBlocked = newMode == AccessMode.BLOCKED
-                    )
-                } else {
-                    it
-                }
-            }
-            val actionName = when (newMode) {
-                AccessMode.BLOCKED -> "block"
-                AccessMode.ALLOWED -> "unblock"
-                AccessMode.SCHEDULED -> "schedule_enable"
-                AccessMode.IGNORED -> "device_ignore"
-            }
-            recordAudit(
-                actionName,
-                target,
-                """{"previous_mode":"${target.accessMode.name.lowercase()}","new_mode":"${newMode.name.lowercase()}"}"""
-            )
-            scope.launch {
-                snackbarHostState.showSnackbar("${target.label} set to ${newMode.label}")
-            }
-        }
-    }
-
-    val handleStartDiscipline: (Int, Int, Int, Int) -> Unit = { deviceId, downKbps, upKbps, minutes ->
-        val target = devices.find { it.id == deviceId }
-        if (target != null) {
-            val limit = DisciplineUiModel(
-                deviceId = target.id,
-                deviceLabel = target.label,
-                deviceMac = target.mac,
-                downloadKbps = downKbps,
-                uploadKbps = upKbps,
-                startedAtUtc = "2026-11-23 16:25 UTC",
-                expiresAtUtc = "in ${minutes}m",
-                remainingLabel = "${minutes}m left",
-                progressFraction = 1.0f,
-                actor = "mobile: ${pairedInstance.mobileDeviceName}"
-            )
-            devices = devices.map {
-                if (it.id == deviceId) it.copy(activeDiscipline = limit) else it
-            }
-            recordAudit(
-                "discipline_start",
-                target,
-                """{"download_kbps":$downKbps,"upload_kbps":$upKbps,"duration_minutes":$minutes}"""
-            )
-            scope.launch {
-                snackbarHostState.showSnackbar(
-                    "Speed limit started on ${target.label} ($downKbps↓/$upKbps↑ Kbps)"
-                )
-            }
-        }
-    }
-
-    val handleEndDiscipline: (Int) -> Unit = { deviceId ->
-        val target = devices.find { it.id == deviceId }
-        if (target != null && target.activeDiscipline != null) {
-            devices = devices.map {
-                if (it.id == deviceId) it.copy(activeDiscipline = null) else it
-            }
-            recordAudit(
-                "discipline_end",
-                target,
-                """{"reason":"manual_restore"}"""
-            )
-            scope.launch {
-                snackbarHostState.showSnackbar("Restored normal WiFi speed for ${target.label}")
-            }
-        }
-    }
-
-    val handleSaveSchedule: (Int, DeviceScheduleUiModel) -> Unit = { deviceId, schedule ->
-        val target = devices.find { it.id == deviceId }
-        if (target != null) {
-            devices = devices.map {
-                if (it.id == deviceId) {
-                    it.copy(
-                        accessMode = AccessMode.SCHEDULED,
-                        schedule = schedule
-                    )
-                } else {
-                    it
-                }
-            }
-            recordAudit(
-                "schedule_update",
-                target,
-                """{"windows":${schedule.windows.size},"default_access":"${schedule.defaultAccess.name.lowercase()}"}"""
-            )
-            scheduleEditorDeviceId = null
-            scope.launch {
-                snackbarHostState.showSnackbar("Saved schedule for ${target.label}")
-            }
-        }
-    }
-
-    val activeDisciplineCount = devices.count { it.activeDiscipline != null }
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -235,38 +91,37 @@ fun UniFiWifiToolApp(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = pairedInstance.instanceName,
+                            text = state.pairedInstance.instanceName,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         TunnelStatusPill(
-                            tunnelState = tunnelState,
+                            tunnelState = state.tunnelState,
                             onClick = {
-                                val next = when (tunnelState) {
+                                val next = when (state.tunnelState) {
                                     TunnelState.CONNECTED -> TunnelState.CONTROLLER_UNREACHABLE
                                     TunnelState.CONTROLLER_UNREACHABLE -> TunnelState.HOME_OFFLINE
                                     TunnelState.HOME_OFFLINE -> TunnelState.CONNECTED
                                 }
-                                tunnelState = next
+                                actions.onPreviewTunnelState(next)
                             }
                         )
                     }
                 },
                 actions = {
-                    // Quick Light / Dark mode toggle in the TopAppBar
                     IconButton(
                         onClick = {
-                            val next = when (themePreference) {
+                            val next = when (state.themePreference) {
                                 ThemePreference.DARK -> ThemePreference.LIGHT
                                 ThemePreference.LIGHT -> ThemePreference.DARK
                                 ThemePreference.SYSTEM -> ThemePreference.LIGHT
                             }
-                            onThemePreferenceChange(next)
+                            actions.onThemePreferenceChange(next)
                         }
                     ) {
                         Icon(
-                            imageVector = if (themePreference == ThemePreference.LIGHT) {
+                            imageVector = if (state.themePreference == ThemePreference.LIGHT) {
                                 Icons.Outlined.DarkMode
                             } else {
                                 Icons.Outlined.LightMode
@@ -274,7 +129,7 @@ fun UniFiWifiToolApp(
                             contentDescription = "Toggle light or dark theme"
                         )
                     }
-                    IconButton(onClick = { showSettingsSheet = true }) {
+                    IconButton(onClick = actions::onOpenSettings) {
                         Icon(
                             imageVector = Icons.Outlined.Settings,
                             contentDescription = "Settings and connection"
@@ -287,19 +142,15 @@ fun UniFiWifiToolApp(
             )
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer
-            ) {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                 AppDestination.entries.forEach { destination ->
                     NavigationBarItem(
-                        selected = currentDestination == destination,
-                        onClick = { currentDestination = destination },
+                        selected = state.destination == destination,
+                        onClick = { actions.onSelectDestination(destination) },
                         icon = {
-                            if (destination == AppDestination.DISCIPLINE && activeDisciplineCount > 0) {
+                            if (destination == AppDestination.DISCIPLINE && state.throttledCount > 0) {
                                 BadgedBox(
-                                    badge = {
-                                        Badge { Text(activeDisciplineCount.toString()) }
-                                    }
+                                    badge = { Badge { Text(state.throttledCount.toString()) } }
                                 ) {
                                     Icon(destination.icon, contentDescription = destination.title)
                                 }
@@ -319,98 +170,80 @@ fun UniFiWifiToolApp(
                 .padding(innerPadding)
         ) {
             ConnectionStateBanner(
-                tunnelState = tunnelState,
-                onRetryClick = { tunnelState = TunnelState.CONNECTED }
+                tunnelState = state.tunnelState,
+                onRetryClick = actions::onSync
             )
 
-            when (currentDestination) {
+            when (state.destination) {
                 AppDestination.OVERVIEW -> OverviewScreen(
-                    instance = pairedInstance,
-                    devices = devices,
-                    auditEntries = auditEntries,
-                    tunnelState = tunnelState,
+                    instance = state.pairedInstance,
+                    devices = state.devices,
+                    auditEntries = state.auditEntries,
+                    tunnelState = state.tunnelState,
                     onSelectDeviceFilter = { filter ->
-                        selectedDeviceFilter = filter
-                        currentDestination = AppDestination.DEVICES
+                        actions.onSelectFilter(filter)
+                        actions.onSelectDestination(AppDestination.DEVICES)
                     },
-                    onOpenDevice = { activeSheetDeviceId = it.id },
-                    onEndDiscipline = handleEndDiscipline,
-                    onOpenAuditTab = { currentDestination = AppDestination.AUDIT },
-                    onSyncNow = {
-                        pairedInstance = pairedInstance.copy(lastSyncLabel = "Updated just now")
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Reconciled inventory with UniFi controller")
-                        }
-                    }
+                    onOpenDevice = { actions.onOpenDevice(it.id) },
+                    onEndDiscipline = actions::onEndDiscipline,
+                    onOpenAuditTab = { actions.onSelectDestination(AppDestination.AUDIT) },
+                    onSyncNow = actions::onSync
                 )
 
                 AppDestination.DEVICES -> DevicesScreen(
-                    devices = devices,
-                    searchQuery = searchQuery,
-                    onSearchQueryChange = { searchQuery = it },
-                    selectedFilter = selectedDeviceFilter,
-                    onSelectFilter = { selectedDeviceFilter = it },
-                    onDeviceClick = { activeSheetDeviceId = it.id }
+                    devices = state.devices,
+                    searchQuery = state.searchQuery,
+                    onSearchQueryChange = actions::onSearchQueryChange,
+                    selectedFilter = state.selectedFilter,
+                    onSelectFilter = actions::onSelectFilter,
+                    onDeviceClick = { actions.onOpenDevice(it.id) }
                 )
 
                 AppDestination.DISCIPLINE -> DisciplineScreen(
-                    devices = devices,
-                    tunnelState = tunnelState,
-                    onStartDiscipline = handleStartDiscipline,
-                    onEndDiscipline = handleEndDiscipline
+                    devices = state.devices,
+                    tunnelState = state.tunnelState,
+                    onStartDiscipline = actions::onStartDiscipline,
+                    onEndDiscipline = actions::onEndDiscipline
                 )
 
-                AppDestination.AUDIT -> AuditScreen(
-                    entries = auditEntries
-                )
+                AppDestination.AUDIT -> AuditScreen(entries = state.auditEntries)
             }
         }
     }
 
-    // Device Control Modal Bottom Sheet
-    val sheetDevice = devices.find { it.id == activeSheetDeviceId }
-    if (sheetDevice != null) {
+    state.activeDevice?.let { device ->
         DeviceDetailSheet(
-            device = sheetDevice,
-            tunnelState = tunnelState,
-            onDismiss = { activeSheetDeviceId = null },
-            onChangeAccessMode = handleAccessModeChange,
-            onOpenScheduleEditor = { target ->
-                activeSheetDeviceId = null
-                scheduleEditorDeviceId = target.id
-            },
-            onStartDiscipline = handleStartDiscipline,
-            onEndDiscipline = handleEndDiscipline
+            device = device,
+            tunnelState = state.tunnelState,
+            onDismiss = actions::onDismissDeviceSheet,
+            onChangeAccessMode = actions::onChangeAccessMode,
+            onOpenScheduleEditor = { actions.onOpenScheduleEditor(it.id) },
+            onStartDiscipline = actions::onStartDiscipline,
+            onEndDiscipline = actions::onEndDiscipline
         )
     }
 
-    // Full-Screen Schedule Editor Dialog
-    val scheduleDevice = devices.find { it.id == scheduleEditorDeviceId }
-    if (scheduleDevice != null) {
+    state.scheduleEditorDevice?.let { device ->
         ScheduleEditorDialog(
-            device = scheduleDevice,
-            onDismiss = { scheduleEditorDeviceId = null },
-            onSaveSchedule = handleSaveSchedule
+            device = device,
+            onDismiss = actions::onDismissScheduleEditor,
+            onSaveSchedule = actions::onSaveSchedule
         )
     }
 
-    // Settings, Theme Mode & Connection Modal Sheet
-    if (showSettingsSheet) {
+    if (state.isSettingsOpen) {
         SettingsSheet(
-            instance = pairedInstance,
-            themePreference = themePreference,
-            onThemePreferenceChange = onThemePreferenceChange,
-            useDynamicColor = useDynamicColor,
-            onDynamicColorChange = onDynamicColorChange,
-            biometricLockEnabled = biometricLockEnabled,
-            onBiometricLockChange = { biometricLockEnabled = it },
-            tunnelState = tunnelState,
-            onTunnelStateChange = { tunnelState = it },
-            onUnpairDevice = {
-                showSettingsSheet = false
-                isPaired = false
-            },
-            onDismiss = { showSettingsSheet = false }
+            instance = state.pairedInstance,
+            themePreference = state.themePreference,
+            onThemePreferenceChange = actions::onThemePreferenceChange,
+            useDynamicColor = state.useDynamicColor,
+            onDynamicColorChange = actions::onDynamicColorChange,
+            biometricLockEnabled = state.biometricLockEnabled,
+            onBiometricLockChange = actions::onBiometricLockChange,
+            tunnelState = state.tunnelState,
+            onTunnelStateChange = actions::onPreviewTunnelState,
+            onUnpairDevice = actions::onUnpairDevice,
+            onDismiss = actions::onDismissSettings
         )
     }
 }
