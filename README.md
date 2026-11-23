@@ -396,6 +396,17 @@ scan generates VEX exceptions for disputed base-image CVEs with
 `critical,high`, or `none` for report-only mode. Critical-only is the default
 because base images regularly carry unfixed high-severity findings.
 
+The `BUILD_TARGET` parameter selects what the pipeline builds:
+
+- `docker` (default) runs the stages below: tests, image build, Scout scan,
+  smoke tests, persistence check, and the master-branch Docker Hub publish.
+- `android` validates the Android toolchain and runs
+  `./gradlew :app:assembleDebug`, archiving the APK. It needs JDK 17+ and an
+  Android SDK with platform 36 on the agent; set `ANDROID_SDK_DIR` (or
+  `ANDROID_HOME`/`ANDROID_SDK_ROOT`) to its location.
+
+For `BUILD_TARGET=docker` the pipeline:
+
 1. validates the Docker toolchain,
 2. runs backend tests in `python:3.13-slim` and publishes JUnit results,
 3. builds the frontend in `node:22-alpine`,

@@ -2,8 +2,9 @@
  * CI pipeline for UniFi WiFi Access Manager.
  *
  * Requirements on the Jenkins agent:
- *   - Docker Engine / CLI (the agent user must be able to run docker)
- *   - Network access to Docker Hub, PyPI, and npm
+ *   - Docker Engine / CLI for BUILD_TARGET=docker (the default)
+ *   - JDK 17+ and an Android SDK with platform 36 for BUILD_TARGET=android
+ *   - Network access to Docker Hub, PyPI, npm, Google Maven, and Gradle services
  *
  * The pipeline builds and tests the image, verifies persistence, and publishes
  * successful master builds to Docker Hub using the Jenkins credentials named
@@ -19,6 +20,16 @@ pipeline {
     agent any
 
     parameters {
+        choice(
+            name: 'BUILD_TARGET',
+            choices: ['docker', 'android'],
+            description: 'What to build. docker builds, scans, smoke-tests, and optionally publishes the container image; android builds the Material 3 debug APK.'
+        )
+        string(
+            name: 'ANDROID_SDK_DIR',
+            defaultValue: '',
+            description: 'Android SDK path on the agent for BUILD_TARGET=android. Leave empty to use ANDROID_HOME or ANDROID_SDK_ROOT.'
+        )
         choice(
             name: 'DOCKER_NETWORK',
             choices: ['default', 'host'],
@@ -49,11 +60,13 @@ pipeline {
     options {
         timestamps()
         disableConcurrentBuilds()
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 45, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
     environment {
+        BUILD_TARGET      = "${params.BUILD_TARGET ?: 'docker'}"
+        ANDROID_SDK_DIR   = "${params.ANDROID_SDK_DIR ?: ''}"
         IMAGE             = "unifi-wifi-tool:ci"
         AUTH_CONTAINER    = "unifi-wifi-ci-auth-${BUILD_NUMBER}"
         SECURE_CONTAINER  = "unifi-wifi-ci-secure-${BUILD_NUMBER}"
@@ -72,6 +85,7 @@ pipeline {
 
     stages {
         stage('Validate toolchain') {
+            when { expression { env.BUILD_TARGET == 'docker' } }
             steps {
                 sh '''
                     set -eu
@@ -85,7 +99,52 @@ pipeline {
             }
         }
 
+        stage('Validate Android toolchain') {
+            when { expression { env.BUILD_TARGET == 'android' } }
+            steps {
+                sh '''
+                    set -eu
+                    command -v java >/dev/null 2>&1 || {
+                        echo "ERROR: java 17 or newer is required for BUILD_TARGET=android." >&2
+                        exit 1
+                    }
+                    java -version
+
+                    sdk="${ANDROID_SDK_DIR:-${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}}"
+                    if [ -z "$sdk" ]; then
+                        echo "ERROR: set the ANDROID_SDK_DIR parameter, or ANDROID_HOME/ANDROID_SDK_ROOT on the agent." >&2
+                        exit 1
+                    fi
+                    if [ ! -d "$sdk/platforms/android-36" ]; then
+                        echo "ERROR: $sdk/platforms/android-36 is missing; install platforms;android-36 and build-tools;36.0.0." >&2
+                        exit 1
+                    fi
+                    echo "Android SDK: $sdk"
+                '''
+            }
+        }
+
+        stage('Android debug APK') {
+            when { expression { env.BUILD_TARGET == 'android' } }
+            steps {
+                sh '''
+                    set -eu
+                    export ANDROID_HOME="${ANDROID_SDK_DIR:-${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}}"
+                    export ANDROID_SDK_ROOT="$ANDROID_HOME"
+                    cd Android
+                    chmod +x gradlew
+                    ./gradlew --no-daemon --stacktrace :app:assembleDebug
+                '''
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'Android/app/build/outputs/apk/debug/*.apk', allowEmptyArchive: true
+                }
+            }
+        }
+
         stage('Backend tests') {
+            when { expression { env.BUILD_TARGET == 'docker' } }
             steps {
                 sh '''
                     set -eu
@@ -104,6 +163,7 @@ pipeline {
         }
 
         stage('Frontend build') {
+            when { expression { env.BUILD_TARGET == 'docker' } }
             steps {
                 sh '''
                     set -eu
@@ -119,6 +179,7 @@ pipeline {
         }
 
         stage('Telemetry PHP lint') {
+            when { expression { env.BUILD_TARGET == 'docker' } }
             steps {
                 sh '''
                     set -eu
@@ -133,6 +194,7 @@ pipeline {
         }
 
         stage('Docker build') {
+            when { expression { env.BUILD_TARGET == 'docker' } }
             steps {
                 sh '''
                     set -eu
@@ -148,6 +210,7 @@ pipeline {
         }
 
         stage('Analyze image with Docker Scout') {
+            when { expression { env.BUILD_TARGET == 'docker' } }
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: env.DOCKERHUB_CREDENTIALS_ID,
@@ -207,6 +270,7 @@ pipeline {
         }
 
         stage('Compose config') {
+            when { expression { env.BUILD_TARGET == 'docker' } }
             steps {
                 script {
                     def composeAvailable = sh(
@@ -223,6 +287,7 @@ pipeline {
         }
 
         stage('Container smoke test') {
+            when { expression { env.BUILD_TARGET == 'docker' } }
             steps {
                 sh '''
                     set -eu
@@ -446,6 +511,7 @@ PY
         }
 
         stage('Data persistence') {
+            when { expression { env.BUILD_TARGET == 'docker' } }
             steps {
                 sh '''
                     set -eu
@@ -537,6 +603,7 @@ PY
         stage('Publish to Docker Hub') {
             when {
                 allOf {
+                    expression { return env.BUILD_TARGET == 'docker' }
                     expression {
                         def branchName = env.GIT_BRANCH ?: env.BRANCH_NAME ?: ''
                         return branchName == 'master' || branchName.endsWith('/master')
@@ -604,22 +671,26 @@ PY
             junit allowEmptyResults: true, testResults: 'backend/test-results.xml'
             archiveArtifacts artifacts: 'image-inspect.json, smoke-health.json', allowEmptyArchive: true
             sh '''
-                docker rm -f "$AUTH_CONTAINER" "$SECURE_CONTAINER" "$PERSIST_CONTAINER" >/dev/null 2>&1 || true
-                docker volume rm "$DATA_VOLUME" >/dev/null 2>&1 || true
-                docker volume rm "unifi-wifi-ci-node-modules-$BUILD_NUMBER" >/dev/null 2>&1 || true
-                docker rmi "$IMAGE" >/dev/null 2>&1 || true
+                if [ "$BUILD_TARGET" = "docker" ]; then
+                    docker rm -f "$AUTH_CONTAINER" "$SECURE_CONTAINER" "$PERSIST_CONTAINER" >/dev/null 2>&1 || true
+                    docker volume rm "$DATA_VOLUME" >/dev/null 2>&1 || true
+                    docker volume rm "unifi-wifi-ci-node-modules-$BUILD_NUMBER" >/dev/null 2>&1 || true
+                    docker rmi "$IMAGE" >/dev/null 2>&1 || true
+                fi
                 rm -f smoke-cookies.txt smoke-login.json
                 rm -rf "$WORKSPACE/.vex"
             '''
         }
         failure {
             sh '''
-                echo "--- unauthenticated container logs ---"
-                docker logs "$AUTH_CONTAINER" 2>&1 || true
-                echo "--- authenticated container logs ---"
-                docker logs "$SECURE_CONTAINER" 2>&1 || true
-                echo "--- persistence container logs ---"
-                docker logs "$PERSIST_CONTAINER" 2>&1 || true
+                if [ "$BUILD_TARGET" = "docker" ]; then
+                    echo "--- unauthenticated container logs ---"
+                    docker logs "$AUTH_CONTAINER" 2>&1 || true
+                    echo "--- authenticated container logs ---"
+                    docker logs "$SECURE_CONTAINER" 2>&1 || true
+                    echo "--- persistence container logs ---"
+                    docker logs "$PERSIST_CONTAINER" 2>&1 || true
+                fi
             '''
         }
     }
