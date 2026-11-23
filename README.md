@@ -394,8 +394,7 @@ scan generates VEX exceptions for disputed base-image CVEs with
 [`scripts/generate-vex.sh`](scripts/generate-vex.sh).
 `SCOUT_FAIL_ON_SEVERITY` controls the build gate: `critical` (default),
 `critical,high`, or `none` for report-only mode. Critical-only is the default
-because the current `python:3.13-slim` base image has unfixed high-severity
-findings.
+because base images regularly carry unfixed high-severity findings.
 
 1. validates the Docker toolchain,
 2. runs backend tests in `python:3.13-slim` and publishes JUnit results,
@@ -483,8 +482,9 @@ See [.env.example](.env.example) for the full list.
 - Review the audit log for unexpected blocks, unblocks, and login attempts.
 - One replica only: the scheduler and SQLite are not designed for horizontal
   scaling yet.
-- The runtime image applies the Debian `zlib1g` security update and removes
-  `pip`/`setuptools` after installing dependencies to reduce attack surface.
+- The runtime image is built on Alpine Linux (musl) rather than glibc, applies
+  the Alpine security updates at build time, and removes `pip`/`setuptools`
+  after installing dependencies to reduce attack surface.
 
 ## Roadmap
 
